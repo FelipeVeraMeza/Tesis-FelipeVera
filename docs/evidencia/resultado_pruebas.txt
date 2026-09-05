@@ -1,0 +1,19 @@
+============================= test session starts =============================
+platform win32 -- Python 3.10.0, pytest-9.1.1, pluggy-1.6.0
+rootdir: C:\Users\felip\OneDrive\Documentos\VS\Proyecto_KPI
+configfile: pytest.ini
+testpaths: tests
+plugins: anyio-4.13.0, Faker-40.11.0
+collected 95 items
+
+tests\test_etl.py .....................................                  [ 38%]
+tests\test_kpi.py .....................................                  [ 77%]
+tests\test_seguridad.py .....................                            [100%]
+
+============================== warnings summary ===============================
+..\..\..\..\AppData\Local\Programs\Python\Python310\lib\site-packages\requests\__init__.py:113
+  C:\Users\felip\AppData\Local\Programs\Python\Python310\lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.5.0) or chardet (7.6.0)/charset_normalizer (3.4.4) doesn't match a supported version!
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 95 passed, 1 warning in 2.90s ========================

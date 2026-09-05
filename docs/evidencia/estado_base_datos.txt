@@ -1,0 +1,27 @@
+C:\Users\felip\AppData\Local\Programs\Python\Python310\lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.5.0) or chardet (7.6.0)/charset_normalizer (3.4.4) doesn't match a supported version!
+  warnings.warn(
+==============================================================
+ Inicializacion de la base de datos - Proyecto KPI
+==============================================================
+  Conexion a Supabase : OK
+  URL                 : https://jhitqotcjtosqjxkyepp.supabase.co
+  Esquema             : CREADO
+    rol                 4 registros
+    usuario             4 registros
+    proceso_ti         21 registros
+    indicador_kpi      44 registros
+    meta_kpi           34 registros
+    resultado_kpi     157 registros
+    notificacion        0 registros
+    incidencia          0 registros
+
+  Control de acceso anonimo (RLS)
+    rol              protegida
+    usuario          protegida
+    proceso_ti       protegida
+    fuente_dato      protegida
+    indicador_kpi    protegida
+    meta_kpi         protegida
+    resultado_kpi    protegida
+    notificacion     protegida
+    incidencia       protegida

@@ -1,0 +1,24 @@
+C:\Users\felip\AppData\Local\Programs\Python\Python310\lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.5.0) or chardet (7.6.0)/charset_normalizer (3.4.4) doesn't match a supported version!
+  warnings.warn(
+==================================================================
+ Medición de rendimiento (RNF1)
+==================================================================
+  Umbral definido : 10 segundos por operación
+  Repeticiones    : 3
+
+  Operación                               Promedio   Mínimo   Máximo   Resultado
+  --------------------------------------------------------------
+  Autenticación                             0.568s   0.544s   0.590s   CUMPLE
+  Consulta de KPI (críticos)                0.785s   0.748s   0.844s   CUMPLE
+  Consulta de KPI (catálogo completo)       0.811s   0.748s   0.880s   CUMPLE
+  Resumen por proceso                       0.980s   0.801s   1.217s   CUMPLE
+  Consulta de alertas                       0.867s   0.821s   0.947s   CUMPLE
+  Carga y procesamiento ETL                 1.006s   0.853s   1.264s   CUMPLE
+  Exportación CSV                           1.091s   0.844s   1.394s   CUMPLE
+  Generación de reporte                     1.636s   1.554s   1.743s   CUMPLE
+
+  Todas las operaciones se completan bajo los 10 segundos.
+  El requisito RNF1 se cumple.
+
+  Nota: los tiempos incluyen la latencia de red hacia la base de datos,
+  alojada en Supabase. En una instalación local serían menores.

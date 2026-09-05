@@ -1,0 +1,32 @@
+# Credenciales y configuracion local
+.env
+.env.*
+!.env.ejemplo
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Archivos generados por el sistema
+backend/database/migrations/instalar_completo.sql
+backend/uploads/
+backend/correos_recibidos/
+
+# Documentos de trabajo y fuentes institucionales
+*.docx
+*.xlsx
+*.xlsm
+docs/fuentes/
+!docs/plantillas/*.csv
+
+# Entorno
+.vscode/
+.idea/
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+Thumbs.db
+desktop.ini

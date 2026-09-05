@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard de KPIs · AFP Horizonte</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- ================= ENCABEZADO ================= -->
+  <header class="barra-superior">
+    <div class="marca">
+      <img src="assets/logoAFPhorizonte.png" alt="AFP Horizonte" class="marca-logo">
+      <div class="marca-texto">
+        <strong>AFP Horizonte</strong>
+        <span>Seguimiento de KPIs · Gerencia de TI</span>
+      </div>
+    </div>
+
+    <div class="barra-acciones">
+      <select id="selectorProceso" aria-label="Seleccionar proceso">
+        <option value="general" selected>Todos los procesos</option>
+      </select>
+
+      <label class="interruptor" title="Mostrar solo los indicadores con medición registrada">
+        <input type="checkbox" id="soloMedidos" checked>
+        <span>Solo con datos</span>
+      </label>
+
+      <button id="btnActualizar" class="btn-secundario" title="Volver a consultar los datos">Actualizar</button>
+      <button id="btnExportar"   class="btn-secundario" title="Descargar los KPI en formato CSV">Exportar CSV</button>
+      <button id="btnReporte"    class="btn-secundario" title="Descargar el reporte consolidado en formato PDF">Reporte PDF</button>
+      <button id="btnVerReporte" class="btn-secundario" title="Ver el reporte en pantalla">Ver reporte</button>
+
+      <div class="usuario-info">
+        <span id="usuarioNombre">—</span>
+        <span id="usuarioRol" class="etiqueta-rol">—</span>
+      </div>
+      <button id="btnIncidencia" class="btn-texto" title="Reportar un error o falla del sistema">Reportar incidencia</button>
+      <button id="btnSalir" class="btn-texto">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <main class="contenido">
+
+    <!-- ================= ENFOQUE DEL PERFIL (RF5) ================= -->
+    <section class="encabezado-vista">
+      <div class="encabezado-titulo">
+        <h1 id="tituloVista">Panel de indicadores</h1>
+        <span id="nivelVista" class="insignia-nivel">—</span>
+      </div>
+      <p id="descripcionVista">—</p>
+    </section>
+
+    <!-- ================= ALERTAS (RF7) ================= -->
+    <section id="panelAlertas" class="panel-alertas oculto">
+      <h2>Alertas de desempeño</h2>
+      <ul id="listaAlertas"></ul>
+    </section>
+
+    <!-- ================= RESUMEN POR PROCESO ================= -->
+    <section class="seccion">
+      <h2 class="titulo-seccion">Cumplimiento por proceso</h2>
+      <div id="tarjetasResumen" class="grilla-tarjetas">
+        <p class="estado-carga">Cargando indicadores…</p>
+      </div>
+    </section>
+
+    <!-- ================= CARGA DE ARCHIVOS (RF1) ================= -->
+    <section id="seccionCarga" class="seccion oculto">
+      <h2 class="titulo-seccion">Carga de datos</h2>
+      <div class="tarjeta-carga">
+        <p class="ayuda">
+          Seleccione el proceso y el archivo del período (CSV o Excel). El sistema valida el
+          formato, aplica las fórmulas de cada indicador y registra los resultados.
+        </p>
+        <form id="formCarga" class="fila-carga">
+          <select id="procesoCarga" required>
+            <option value="cambios">Gestión de Cambios</option>
+            <option value="incidentes">Gestión de Incidentes</option>
+            <option value="requerimientos">Gestión de Requerimientos</option>
+            <option value="demanda">Gestión de Demanda</option>
+          </select>
+          <input type="file" id="archivoCarga" accept=".csv,.xlsx,.xlsm" required>
+          <button type="submit" class="btn-primario">Procesar archivo</button>
+        </form>
+        <div id="resultadoCarga" class="resultado-carga"></div>
+      </div>
+    </section>
+
+    <!-- ================= DETALLE DE KPIs ================= -->
+    <section class="seccion">
+      <div class="cabecera-grafico">
+        <h2 class="titulo-seccion" id="tituloDetalle">Detalle de indicadores</h2>
+        <span id="contadorKpis" class="contador"></span>
+      </div>
+      <div class="tabla-envoltura">
+        <table id="tablaKpis">
+          <thead>
+            <tr>
+              <th>Indicador</th>
+              <th>Proceso</th>
+              <th>Valor</th>
+              <th>Meta</th>
+              <th>Tendencia</th>
+              <th>Estado</th>
+              <th>Proyección</th>
+              <th>Alerta</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="9" class="estado-carga">Cargando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================= GRÁFICO ================= -->
+    <section id="seccionGrafico" class="seccion oculto">
+      <div class="cabecera-grafico">
+        <h2 class="titulo-seccion" id="tituloGrafico">Evolución del indicador</h2>
+        <button id="btnCerrarGrafico" class="btn-texto">Cerrar</button>
+      </div>
+      <p id="detalleGrafico" class="ayuda"></p>
+      <div class="caja-grafico">
+        <canvas id="lienzoGrafico"></canvas>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ================= MODAL DE NOTIFICACIÓN (RF7) ================= -->
+  <div id="modalAlerta" class="modal-fondo oculto" role="dialog" aria-modal="true"
+       aria-labelledby="modalTitulo">
+    <div class="modal-caja">
+      <header class="modal-cabecera">
+        <span class="modal-icono" aria-hidden="true">🚨</span>
+        <h2 id="modalTitulo">Notificar desviación de desempeño</h2>
+        <button id="modalCerrar" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+      </header>
+
+      <div class="modal-cuerpo">
+        <!-- Paso 1: confirmación -->
+        <div id="modalConfirmacion">
+          <p class="modal-intro">
+            Se notificará al responsable del proceso sobre la desviación detectada
+            en el siguiente indicador:
+          </p>
+
+          <dl class="modal-detalle">
+            <div><dt>Indicador</dt><dd id="alertaKpi">—</dd></div>
+            <div><dt>Proceso</dt><dd id="alertaProceso">—</dd></div>
+            <div><dt>Valor registrado</dt><dd id="alertaValor">—</dd></div>
+            <div><dt>Meta comprometida</dt><dd id="alertaMeta">—</dd></div>
+            <div><dt>Estado</dt><dd id="alertaEstado">—</dd></div>
+            <div><dt>Destinatario</dt><dd id="alertaDestinatario">—</dd></div>
+          </dl>
+
+          <p id="modalError" class="mensaje-error"></p>
+        </div>
+
+        <!-- Paso 2: resultado del envío -->
+        <div id="modalResultado" class="oculto">
+          <div class="modal-exito">
+            <strong>Notificación enviada correctamente.</strong>
+            <p id="resultadoDetalle"></p>
+          </div>
+          <pre id="resultadoMensaje" class="modal-mensaje"></pre>
+        </div>
+      </div>
+
+      <footer class="modal-pie">
+        <button id="modalCancelar" class="btn-secundario">Cancelar</button>
+        <button id="modalConfirmar" class="btn-primario">Enviar notificación</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ================= MODAL DE INCIDENCIAS (RF8) ================= -->
+  <div id="modalIncidencia" class="modal-fondo oculto" role="dialog" aria-modal="true"
+       aria-labelledby="incidenciaTitulo">
+    <div class="modal-caja">
+      <header class="modal-cabecera">
+        <span class="modal-icono" aria-hidden="true">🛠️</span>
+        <h2 id="incidenciaTitulo">Reportar una incidencia técnica</h2>
+        <button id="incidenciaCerrar" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+      </header>
+
+      <div class="modal-cuerpo">
+        <div id="incidenciaFormulario">
+          <p class="modal-intro">
+            Informe cualquier error o comportamiento inesperado detectado durante
+            el uso del sistema. El reporte queda registrado para su revisión.
+          </p>
+
+          <div class="campo">
+            <label for="incidenciaModulo">Módulo afectado</label>
+            <select id="incidenciaModulo">
+              <option value="Dashboard">Dashboard</option>
+              <option value="Carga de datos">Carga de datos</option>
+              <option value="Reportes">Reportes</option>
+              <option value="Alertas">Alertas</option>
+              <option value="Otro">Otro</option>
+            </select>
+          </div>
+
+          <div class="campo">
+            <label for="incidenciaSeveridad">Severidad</label>
+            <select id="incidenciaSeveridad">
+              <option value="Alta">Alta · impide continuar</option>
+              <option value="Media" selected>Media · dificulta el trabajo</option>
+              <option value="Baja">Baja · molestia menor</option>
+            </select>
+          </div>
+
+          <div class="campo">
+            <label for="incidenciaTituloCampo">Título</label>
+            <input type="text" id="incidenciaTituloCampo" maxlength="150"
+                   placeholder="Resuma el problema en una línea">
+          </div>
+
+          <div class="campo">
+            <label for="incidenciaDescripcion">Descripción</label>
+            <textarea id="incidenciaDescripcion" rows="4" maxlength="1000"
+                      placeholder="Indique qué estaba haciendo y qué ocurrió"></textarea>
+          </div>
+
+          <p id="incidenciaError" class="mensaje-error"></p>
+        </div>
+
+        <div id="incidenciaResultado" class="oculto">
+          <div class="modal-exito">
+            <strong>Incidencia registrada.</strong>
+            <p id="incidenciaDetalle"></p>
+          </div>
+        </div>
+      </div>
+
+      <footer class="modal-pie">
+        <button id="incidenciaCancelar" class="btn-secundario">Cancelar</button>
+        <button id="incidenciaEnviar" class="btn-primario">Registrar incidencia</button>
+      </footer>
+    </div>
+  </div>
+
+  <footer class="pie">
+    Prototipo académico · Datos ficticios para fines de titulación · AFP Horizonte
+  </footer>
+
+  <script src="js/api.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>
