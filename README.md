@@ -77,6 +77,9 @@ consume una API REST que devuelve JSON.
 ```
 Proyecto_KPI/
 ├── .env.ejemplo                  Plantilla de configuración
+├── Procfile                      Arranque en el servidor
+├── railway.json                  Configuración de despliegue
+├── requirements.txt
 ├── pytest.ini
 │
 ├── backend/
@@ -123,6 +126,7 @@ Proyecto_KPI/
 │   └── test_seguridad.py
 │
 └── docs/
+    ├── despliegue.md             Publicación en Railway
     ├── manual_uso.md             Manual de usuario
     ├── guia_defensa.md           Guion y preguntas previsibles
     ├── argumentos_defensa.md     Hallazgos e impacto del trabajo

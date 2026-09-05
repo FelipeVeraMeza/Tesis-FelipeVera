@@ -1,6 +1,9 @@
 """
 Configuracion central del sistema de seguimiento de KPIs.
-Carga las variables de entorno desde el archivo .env de la raiz del proyecto.
+
+Las variables se leen del entorno. En desarrollo provienen del archivo .env
+de la raiz del proyecto; en un despliegue, de las variables definidas en la
+plataforma, donde ese archivo no existe.
 """
 import os
 from pathlib import Path
@@ -10,15 +13,25 @@ from dotenv import load_dotenv
 # Raiz del proyecto (dos niveles arriba de este archivo)
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
+# El archivo .env solo esta presente en desarrollo
 load_dotenv(BASE_DIR / ".env")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SECRET_KEY = os.getenv("SUPABASE_SECRET_KEY", "")
 SUPABASE_PUBLISHABLE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY", "")
 
+# Las plataformas de despliegue asignan el puerto mediante esta variable
 FLASK_HOST = os.getenv("FLASK_HOST", "127.0.0.1")
-FLASK_PORT = int(os.getenv("FLASK_PORT", "5000"))
-FLASK_DEBUG = os.getenv("FLASK_DEBUG", "True").lower() == "true"
+FLASK_PORT = int(os.getenv("PORT") or os.getenv("FLASK_PORT", "5000"))
+
+# En produccion el modo de depuracion debe permanecer desactivado, ya que
+# expone trazas de error y permite ejecutar codigo desde el navegador
+ENTORNO = os.getenv("ENTORNO", "desarrollo").lower()
+ES_PRODUCCION = ENTORNO == "produccion"
+FLASK_DEBUG = (
+    False if ES_PRODUCCION else os.getenv("FLASK_DEBUG", "True").lower() == "true"
+)
+
 SECRET_KEY = os.getenv("SECRET_KEY", "clave-desarrollo")
 
 # Rutas utiles
@@ -85,5 +98,13 @@ def validar_configuracion() -> None:
     ]
     if faltantes:
         raise RuntimeError(
-            "Faltan variables en el archivo .env: " + ", ".join(faltantes)
+            "Faltan variables de configuracion: "
+            + ", ".join(faltantes)
+            + ". Definalas en el archivo .env o en el entorno del despliegue."
+        )
+
+    # Con la clave por defecto, los tokens de sesion serian predecibles
+    if ES_PRODUCCION and SECRET_KEY == "clave-desarrollo":
+        raise RuntimeError(
+            "Defina SECRET_KEY con un valor propio antes de operar en produccion."
         )
