@@ -152,6 +152,7 @@ Proyecto_KPI/
     ├── despliegue.md             Publicación en Railway
     ├── plan_pruebas.md           Plan de aseguramiento de la calidad
     ├── manual_uso.md             Manual de usuario
+    ├── resumen_reunion.md        Resumen para reunión de avance
     ├── guia_defensa.md           Guion y preguntas previsibles
     ├── argumentos_defensa.md     Hallazgos e impacto del trabajo
     ├── evidencia/                Salidas de respaldo

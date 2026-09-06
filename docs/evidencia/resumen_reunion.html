@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Resumen de reunión · Proyecto de título</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+@page { size: A4; margin: 18mm 16mm; }
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0 auto;
+  max-width: 900px;
+  padding: 32px;
+  font-family: "Inter", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 12.5px;
+  line-height: 1.62;
+  color: #17212b;
+  background: #fff;
+}
+
+h1 {
+  margin: 34px 0 14px;
+  padding-bottom: 9px;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -.015em;
+  color: #0a2540;
+  border-bottom: 2px solid #14446e;
+}
+
+h1:first-child { margin-top: 0; }
+h1.nueva-pagina { break-before: page; }
+
+h2 {
+  margin: 26px 0 11px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #14446e;
+  break-after: avoid;
+}
+
+h3 {
+  margin: 18px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #46586b;
+}
+
+p { margin: 0 0 11px; }
+
+strong { font-weight: 600; color: #0a2540; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0 20px;
+  font-size: 11.5px;
+  break-inside: avoid;
+}
+
+th {
+  padding: 8px 11px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #5c6b7d;
+  background: #f5f9fc;
+  border-bottom: 1px solid #dde5ec;
+}
+
+td {
+  padding: 8px 11px;
+  border-bottom: 1px solid #eef2f6;
+  vertical-align: top;
+}
+
+tr:last-child td { border-bottom: none; }
+
+/* Las columnas numéricas se alinean a la derecha */
+th[align="right"], td[align="right"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+ul, ol { margin: 0 0 13px; padding-left: 22px; }
+li { margin-bottom: 5px; }
+
+code {
+  padding: 1px 5px;
+  font-family: "SF Mono", Consolas, monospace;
+  font-size: 11px;
+  background: #f5f9fc;
+  border-radius: 3px;
+  color: #14446e;
+}
+
+hr {
+  height: 0;
+  margin: 26px 0;
+  border: none;
+  border-top: 1px solid #e2e8ee;
+}
+
+a { color: #1d5c93; text-decoration: none; }
+
+.acciones {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+}
+
+.acciones button {
+  padding: 9px 17px;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: #fff;
+  background: #14446e;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+@media print {
+  body { padding: 0; max-width: none; }
+  .acciones { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="acciones"><button onclick="window.print()">Guardar como PDF</button></div>
+<h1>Resumen para reunión de avance</h1>
+<p><strong>Proyecto de título · Felipe Vera Meza</strong>
+Desarrollo de un sistema de visualización de KPIs para la Gerencia de
+Tecnologías de la Información · AFP Horizonte</p>
+<hr />
+<h1 class="nueva-pagina">Parte 1 · Resumen de la memoria</h1>
+<h2>Problema</h2>
+<p>La Gerencia de TI de una administradora de fondos de pensiones consolidaba sus
+indicadores de desempeño de forma manual: cada responsable descargaba archivos
+desde distintas plataformas, los depuraba en planillas, aplicaba las fórmulas y
+armaba gráficos que se consolidaban en un informe mensual.</p>
+<p>Ese procedimiento presentaba tres problemas:</p>
+<ul>
+<li>Consumía tiempo y era propenso a errores en la manipulación.</li>
+<li>No dejaba trazabilidad: no quedaba registro de quién cargó qué dato ni cuándo.</li>
+<li>La información llegaba con hasta 30 días de desfase, lo que derivaba en
+  decisiones reactivas.</li>
+</ul>
+<h2>Objetivo</h2>
+<p>Desarrollar un sistema semi-automatizado de seguimiento y visualización de los
+indicadores clave de desempeño de los procesos de TI, para optimizar la
+eficiencia operativa y fortalecer la toma de decisiones.</p>
+<p><strong>Objetivos específicos</strong></p>
+<ol>
+<li>Sistematizar los indicadores necesarios para medir el desempeño.</li>
+<li>Modelar el mapa de procesos y los flujos de información.</li>
+<li>Desarrollar los procesos de carga, transformación y almacenamiento (ETL).</li>
+<li>Implementar los dashboards de visualización.</li>
+<li>Validar el modelo mediante juicio de expertos y escenarios simulados.</li>
+</ol>
+<h2>Alcance</h2>
+<p>Cuatro procesos críticos, seleccionados por su impacto en la continuidad
+operativa:</p>
+<table>
+<thead>
+<tr>
+<th>Proceso</th>
+<th style="text-align: right;">Indicadores</th>
+<th>Ficha técnica</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Gestión de Cambios TI</td>
+<td style="text-align: right;">4</td>
+<td>Tabla 11</td>
+</tr>
+<tr>
+<td>Gestión de Requerimientos TI</td>
+<td style="text-align: right;">3</td>
+<td>Tabla 12</td>
+</tr>
+<tr>
+<td>Gestión de Incidentes TI</td>
+<td style="text-align: right;">2</td>
+<td>Tabla 13</td>
+</tr>
+<tr>
+<td>Gestión de la Demanda TI</td>
+<td style="text-align: right;">2</td>
+<td>Tabla 14</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td style="text-align: right;"><strong>11</strong></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Fuera del alcance:</strong> despliegue productivo, procesos adicionales a los cuatro
+críticos, conexión directa a sistemas transaccionales, mantenimiento posterior
+al cierre y algoritmos de Machine Learning.</p>
+<h2>Metodología</h2>
+<p>Enfoque aplicado, con diseño descriptivo y no experimental. Se adoptó una
+adaptación del ciclo de vida dimensional de Kimball y Ross (2013), organizado
+en fases: levantamiento, modelado, ETL, visualización y validación.</p>
+<h2>Arquitectura</h2>
+<p>Cuatro capas con interfaces definidas:</p>
+<table>
+<thead>
+<tr>
+<th>Capa</th>
+<th>Tecnología</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Presentación</td>
+<td>HTML, CSS, JavaScript · Chart.js</td>
+</tr>
+<tr>
+<td>Aplicación</td>
+<td>Python · Flask (API REST)</td>
+</tr>
+<tr>
+<td>Procesamiento</td>
+<td>ETL · pandas · NumPy</td>
+</tr>
+<tr>
+<td>Almacenamiento</td>
+<td>Base de datos relacional · 7 tablas · 3FN</td>
+</tr>
+</tbody>
+</table>
+<p>El modelo lógico comprende las entidades Rol, Usuario, Proceso_TI,
+Indicador_KPI, Meta_KPI, Resultado_KPI y Fuente_Dato (Tablas 17 a 23),
+normalizadas hasta tercera forma normal.</p>
+<h2>Requisitos</h2>
+<p><strong>Funcionales (Tabla 15):</strong> RF1 carga de archivos · RF2 validación automática ·
+RF3 procesamiento de indicadores · RF4 usuarios y autenticación ·
+RF5 dashboards personalizados · RF6 reportes y exportación · RF7 alertas
+automáticas · RF8 registro de incidencias · RF9 seguimiento histórico ·
+RF10 módulo predictivo básico.</p>
+<p><strong>No funcionales (Tabla 16):</strong> RNF1 rendimiento bajo 10 segundos ·
+RNF2 disponibilidad · RNF3 seguridad · RNF4 escalabilidad · RNF5 usabilidad ·
+RNF6 mantenibilidad.</p>
+<h2>Conclusiones de la memoria</h2>
+<p>El proyecto sistematizó los indicadores críticos, implementó el procesamiento
+ETL y construyó un dashboard ejecutivo con semáforos, gráficos de tendencia y
+alertas ante bajo desempeño, transformando una gestión reactiva en una
+proactiva.</p>
+<hr />
+<h1 class="nueva-pagina">Parte 2 · Estado del sistema</h1>
+<h2>Requisitos funcionales</h2>
+<table>
+<thead>
+<tr>
+<th>Requisito</th>
+<th>Estado</th>
+<th>Cómo se implementó</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RF1 Carga de archivos</td>
+<td>Cumplido</td>
+<td>Admite CSV y Excel, con validación previa</td>
+</tr>
+<tr>
+<td>RF2 Validación automática</td>
+<td>Cumplido</td>
+<td>Columnas, períodos, tipos, duplicados y coherencia</td>
+</tr>
+<tr>
+<td>RF3 Procesamiento de indicadores</td>
+<td>Cumplido</td>
+<td>Las 11 fórmulas de las Tablas 11 a 14</td>
+</tr>
+<tr>
+<td>RF4 Usuarios y autenticación</td>
+<td>Cumplido</td>
+<td>Cuatro perfiles · PBKDF2-SHA256 · tokens firmados</td>
+</tr>
+<tr>
+<td>RF5 Dashboards personalizados</td>
+<td>Cumplido</td>
+<td>Cuatro vistas según perfil, con nivel estratégico o táctico</td>
+</tr>
+<tr>
+<td>RF6 Reportes y exportación</td>
+<td>Cumplido</td>
+<td>CSV y PDF descargable</td>
+</tr>
+<tr>
+<td>RF7 Alertas automáticas</td>
+<td>Cumplido</td>
+<td>Detección, notificación al responsable y envío por correo</td>
+</tr>
+<tr>
+<td>RF8 Registro de incidencias</td>
+<td>Cumplido</td>
+<td>Formulario y registro con trazabilidad</td>
+</tr>
+<tr>
+<td>RF9 Seguimiento histórico</td>
+<td>Cumplido</td>
+<td>25 períodos por indicador</td>
+</tr>
+<tr>
+<td>RF10 Módulo predictivo</td>
+<td>Cumplido</td>
+<td>Regresión lineal con coeficiente de determinación</td>
+</tr>
+</tbody>
+</table>
+<p><strong>10 de 10 requisitos funcionales implementados.</strong></p>
+<h2>Requisitos no funcionales</h2>
+<table>
+<thead>
+<tr>
+<th>Requisito</th>
+<th>Estado</th>
+<th>Evidencia</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RNF1 Rendimiento</td>
+<td>Cumplido</td>
+<td>0,88 s por archivo (umbral: 10 s)</td>
+</tr>
+<tr>
+<td>RNF2 Disponibilidad</td>
+<td>No aplica</td>
+<td>Declarado fuera del alcance para un prototipo</td>
+</tr>
+<tr>
+<td>RNF3 Seguridad</td>
+<td>Cumplido</td>
+<td>Cifrado, control por perfil y Row Level Security</td>
+</tr>
+<tr>
+<td>RNF4 Escalabilidad</td>
+<td>Cumplido</td>
+<td>De 11 a 44 indicadores sin alterar el esquema</td>
+</tr>
+<tr>
+<td>RNF5 Usabilidad</td>
+<td>Cumplido</td>
+<td>Interfaz responsiva · contraste WCAG AA</td>
+</tr>
+<tr>
+<td>RNF6 Mantenibilidad</td>
+<td>Cumplido</td>
+<td>Código documentado y versionado</td>
+</tr>
+</tbody>
+</table>
+<h2>Los once indicadores, con datos</h2>
+<table>
+<thead>
+<tr>
+<th>Proceso</th>
+<th>Indicador</th>
+<th style="text-align: right;">Resultado</th>
+<th style="text-align: right;">Meta</th>
+<th>Estado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Cambios</strong></td>
+<td>Tasa de aceptación de cambios</td>
+<td style="text-align: right;">95,53 %</td>
+<td style="text-align: right;">90 %</td>
+<td>Cumple</td>
+</tr>
+<tr>
+<td></td>
+<td>Cambios urgentes sobre el total</td>
+<td style="text-align: right;">26,79 %</td>
+<td style="text-align: right;">30 %</td>
+<td>Cumple</td>
+</tr>
+<tr>
+<td></td>
+<td>Cambios con vuelta atrás</td>
+<td style="text-align: right;">6,95 %</td>
+<td style="text-align: right;">20 %</td>
+<td>Cumple</td>
+</tr>
+<tr>
+<td></td>
+<td>Cambios con error en certificación</td>
+<td style="text-align: right;">11,83 %</td>
+<td style="text-align: right;">20 %</td>
+<td>Cumple</td>
+</tr>
+<tr>
+<td><strong>Requerimientos</strong></td>
+<td>Cantidad de requerimientos rechazados</td>
+<td style="text-align: right;">16,47</td>
+<td style="text-align: right;">15</td>
+<td>En riesgo</td>
+</tr>
+<tr>
+<td></td>
+<td>Tiempo medio de resolución</td>
+<td style="text-align: right;">17,82 d</td>
+<td style="text-align: right;">20 d</td>
+<td>Cumple</td>
+</tr>
+<tr>
+<td></td>
+<td>Porcentaje de resolución dentro de SLA</td>
+<td style="text-align: right;">95,73 %</td>
+<td style="text-align: right;">90 %</td>
+<td>Cumple</td>
+</tr>
+<tr>
+<td><strong>Incidentes</strong></td>
+<td>Tiempo de resolución de incidente</td>
+<td style="text-align: right;">20,04 h</td>
+<td style="text-align: right;">20 h</td>
+<td>En riesgo</td>
+</tr>
+<tr>
+<td></td>
+<td>Capacidad de cierre de incidentes</td>
+<td style="text-align: right;">88,46 %</td>
+<td style="text-align: right;">90 %</td>
+<td>En riesgo</td>
+</tr>
+<tr>
+<td><strong>Demanda</strong></td>
+<td>Tiempo de ciclo de gestión de demanda</td>
+<td style="text-align: right;">13,16 d</td>
+<td style="text-align: right;">15 d</td>
+<td>Cumple</td>
+</tr>
+<tr>
+<td></td>
+<td>Porcentaje de solicitudes evaluadas dentro de SLA</td>
+<td style="text-align: right;">83,58 %</td>
+<td style="text-align: right;">90 %</td>
+<td>En riesgo</td>
+</tr>
+</tbody>
+</table>
+<p><strong>7 cumplen · 4 requieren atención · 25 períodos por indicador.</strong></p>
+<h2>Origen de los datos</h2>
+<table>
+<thead>
+<tr>
+<th>Origen</th>
+<th style="text-align: right;">Mediciones</th>
+<th>Período</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Levantamiento institucional (fuente Jira)</td>
+<td style="text-align: right;">44</td>
+<td>sept 2024 – mar 2025</td>
+</tr>
+<tr>
+<td>Generadas para demostración</td>
+<td style="text-align: right;">239</td>
+<td>abr 2025 – sept 2026</td>
+</tr>
+</tbody>
+</table>
+<p>Las mediciones generadas se registran bajo una fuente identificada como
+<strong>Simulado</strong>, de modo que siempre puedan distinguirse de las efectivas.</p>
+<hr />
+<h1 class="nueva-pagina">Parte 3 · Lo que excede lo comprometido</h1>
+<p>Estas capacidades no estaban en los requisitos, pero se incorporaron durante el
+desarrollo.</p>
+<h2>Las tres líneas de evolución, implementadas</h2>
+<p>La memoria las planteaba como trabajos futuros:</p>
+<table>
+<thead>
+<tr>
+<th>Línea planteada</th>
+<th>Estado actual</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Integración con servidor de correo (SMTP)</td>
+<td>Implementada y operativa</td>
+</tr>
+<tr>
+<td>Conectores a fuentes de datos (Jira)</td>
+<td>Desarrollado; requiere credenciales</td>
+</tr>
+<tr>
+<td>Módulo de predicción avanzada</td>
+<td>Robustecido con R² y volatilidad</td>
+</tr>
+</tbody>
+</table>
+<h2>Aplicación de análisis por vistas</h2>
+<p>En lugar de una pantalla única, el sistema se organiza en seis vistas que
+comparten un mismo contexto de filtros:</p>
+<p><strong>Resumen</strong> · síntesis del desempeño, atención requerida y evolución
+<strong>Procesos</strong> · desempeño por proceso, con acceso a su detalle
+<strong>Indicadores</strong> · catálogo filtrable por estado y búsqueda
+<strong>Tendencias</strong> · evolución histórica, proyección y mediciones registradas
+<strong>Alertas</strong> · desviaciones con su brecha y tendencia
+<strong>Reportes</strong> · exportación, carga e historial de cargas</p>
+<p>Permite recorrer desde el estado general hasta la evidencia de cada indicador.</p>
+<h2>Aseguramiento de la calidad</h2>
+<p><strong>201 pruebas automatizadas</strong>, organizadas por tipo:</p>
+<table>
+<thead>
+<tr>
+<th>Módulo</th>
+<th style="text-align: right;">Pruebas</th>
+<th>Verifica</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_etl.py</code></td>
+<td style="text-align: right;">37</td>
+<td>Fórmulas, validaciones y normalización</td>
+</tr>
+<tr>
+<td><code>test_kpi.py</code></td>
+<td style="text-align: right;">53</td>
+<td>Evaluación, cumplimiento y proyecciones</td>
+</tr>
+<tr>
+<td><code>test_seguridad.py</code></td>
+<td style="text-align: right;">21</td>
+<td>Cifrado, sesiones y permisos</td>
+</tr>
+<tr>
+<td><code>test_api.py</code></td>
+<td style="text-align: right;">49</td>
+<td>Endpoints, contratos y códigos HTTP</td>
+</tr>
+<tr>
+<td><code>test_e2e.py</code></td>
+<td style="text-align: right;">41</td>
+<td>Integración, flujos, rendimiento y concurrencia</td>
+</tr>
+</tbody>
+</table>
+<p>Se ejecutan automáticamente ante cada cambio del repositorio.</p>
+<h2>Seguridad más allá de lo exigido</h2>
+<p>El requisito RNF3 pedía credenciales cifradas y control por rol. Se incorporó
+además <strong>Row Level Security</strong> sobre las nueve tablas: aunque alguien obtuviera
+la clave pública del proyecto, no podría leer ni un registro.</p>
+<h2>Trazabilidad de las operaciones</h2>
+<table>
+<thead>
+<tr>
+<th>Registro</th>
+<th>Qué conserva</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cargas</td>
+<td>Usuario, fecha, archivo, proceso, filas, períodos y advertencias</td>
+</tr>
+<tr>
+<td>Notificaciones</td>
+<td>Quién notificó, a quién, sobre qué indicador y en qué estado</td>
+</tr>
+<tr>
+<td>Incidencias</td>
+<td>Usuario, módulo, severidad y fecha</td>
+</tr>
+</tbody>
+</table>
+<h2>Publicación</h2>
+<p>El sistema está desplegado y accesible desde internet:</p>
+<p><strong>https://web-production-ad202.up.railway.app</strong></p>
+<p>Con integración continua: cada cambio ejecuta las pruebas y verifica que no se
+expongan credenciales antes de integrarse.</p>
+<h2>Repositorio</h2>
+<p><strong>https://github.com/FelipeVeraMeza/Tesis-FelipeVera</strong></p>
+<hr />
+<h1 class="nueva-pagina">Parte 4 · Puntos a conversar</h1>
+<h2>Motor de base de datos</h2>
+<p>La memoria describe <strong>Oracle Database Express Edition</strong> y las Figuras 27 a 29
+muestran Oracle SQL Developer. La implementación utiliza <strong>PostgreSQL</strong>.</p>
+<p>El modelo lógico no cambió: las siete tablas, sus claves, las restricciones de
+integridad y la normalización hasta 3FN se mantienen como fueron definidas.
+Ambos son motores relacionales de licencia libre, y la bibliografía de la
+memoria ya incluye a Momjian (2001) sobre PostgreSQL.</p>
+<p>La capa de acceso a datos está encapsulada en un módulo, de modo que una
+migración a Oracle afectaría solo a ese componente.</p>
+<h2>Origen de los datos históricos</h2>
+<p>La memoria menciona datos sintéticos de marzo a octubre de 2025. El sistema
+opera sobre las mediciones efectivas del levantamiento —septiembre de 2024 a
+marzo de 2025, fuente Jira— y completa los períodos posteriores con mediciones
+generadas, identificadas como tales.</p>
+<h2>Alcance del catálogo</h2>
+<p>El levantamiento identificó 21 procesos y 44 indicadores. La memoria acota el
+sistema a los 11 indicadores de los cuatro procesos críticos, que son los que
+efectivamente automatiza. El resto del catálogo se conserva como contexto y el
+sistema advierte cuando se consulta.</p>
+<h2>Erratas menores</h2>
+<table>
+<thead>
+<tr>
+<th>Ubicación</th>
+<th>Dice</th>
+<th>Debería decir</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sección 7</td>
+<td><code>KPIs_TI_Procesos_v7.xlsx</code></td>
+<td><code>KPIs_TI_Procesos_v2.xlsx</code></td>
+</tr>
+<tr>
+<td>Sección 7</td>
+<td><code>appy.py</code></td>
+<td>El backend se organizó en módulos</td>
+</tr>
+<tr>
+<td>Sección 7</td>
+<td>biblioteca <code>oracledb</code></td>
+<td><code>psycopg2</code></td>
+</tr>
+</tbody>
+</table>
+<p>El detalle completo, con el texto propuesto para cada corrección, está en
+<code>docs/correcciones_documento.md</code>.</p>
+<hr />
+<h1>Cifras de referencia</h1>
+<table>
+<thead>
+<tr>
+<th>Concepto</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Procesos del alcance</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Indicadores implementados</td>
+<td>11 de 11</td>
+</tr>
+<tr>
+<td>Períodos por indicador</td>
+<td>25 (sept 2024 – sept 2026)</td>
+</tr>
+<tr>
+<td>Mediciones efectivas</td>
+<td>44 (fuente Jira)</td>
+</tr>
+<tr>
+<td>Requisitos funcionales</td>
+<td>10 de 10</td>
+</tr>
+<tr>
+<td>Pruebas automatizadas</td>
+<td>201</td>
+</tr>
+<tr>
+<td>Tiempo de procesamiento</td>
+<td>0,88 s (umbral: 10 s)</td>
+</tr>
+<tr>
+<td>Tablas protegidas</td>
+<td>9 de 9</td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>
