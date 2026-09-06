@@ -129,6 +129,7 @@ Proyecto_KPI/
 │       ├── importar_excel.py     Importación del catálogo institucional
 │       ├── medir_rendimiento.py  Medición de tiempos (RNF1)
 │       ├── generar_periodos.py   Mediciones para demostración
+│       ├── alinear_catalogo.py   Ajuste a las fichas técnicas
 │       └── servidor_correo_prueba.py
 │
 ├── frontend/                     Capa de presentación
