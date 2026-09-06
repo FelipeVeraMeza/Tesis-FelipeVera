@@ -541,3 +541,4 @@ def evolucion_cumplimiento(codigo_proceso: str | None = None) -> list[dict]:
         }
         for periodo, valores in sorted(cumplimientos.items())
     ]
+

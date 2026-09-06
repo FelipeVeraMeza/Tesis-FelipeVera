@@ -71,7 +71,8 @@ const PERFIL = VISTAS_PERFIL[PERMISOS.vista] || VISTAS_PERFIL.detallada;
 const estado = {
   vista: "resumen",
   filtros: {
-    proceso: PERFIL.soloCriticos ? "criticos" : "general",
+    // Todos los perfiles parten del alcance declarado en el proyecto
+    proceso: "criticos",
     estado: "todos",
     busqueda: "",
     severidad: "todas",
@@ -263,6 +264,13 @@ function actualizarContadorAlertas() {
 function actualizarContexto() {
   const selector = $("filtroProceso");
   const nombre = selector.options[selector.selectedIndex]?.textContent || "";
+
+  // El catálogo completo corresponde al levantamiento de la Gerencia y
+  // excede los cuatro procesos definidos en el alcance del proyecto
+  const nota = $("notaAlcance");
+  if (nota) {
+    nota.classList.toggle("oculto", estado.filtros.proceso !== "general");
+  }
   const { estado: filtroEstado, busqueda } = estado.filtros;
 
   const partes = [nombre];
@@ -1274,8 +1282,8 @@ async function cargarSelectorProcesos() {
         .join("");
 
     selector.innerHTML =
-      '<option value="criticos">Procesos críticos</option>' +
-      '<option value="general">Todos los procesos</option>' +
+      '<option value="criticos">Procesos críticos · alcance del proyecto</option>' +
+      '<option value="general">Catálogo completo de la Gerencia</option>' +
       (criticos.length ? `<optgroup label="Críticos">${opciones(criticos)}</optgroup>` : "") +
       (resto.length ? `<optgroup label="Otros procesos">${opciones(resto)}</optgroup>` : "");
 
