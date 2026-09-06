@@ -274,8 +274,12 @@ function pintarSintesis(g) {
 
     <article class="tarjeta-sintesis">
       <span class="sintesis-rotulo">Procesos</span>
-      <span class="sintesis-cifra">${g.procesos_en_meta}<small>/${g.procesos_totales}</small></span>
-      <span class="sintesis-nota">dentro de meta</span>
+      <span class="sintesis-cifra">${g.procesos_en_meta}<small>/${g.procesos_medidos ?? g.procesos_totales}</small></span>
+      <span class="sintesis-nota">dentro de meta${
+        g.procesos_medidos !== undefined && g.procesos_medidos < g.procesos_totales
+          ? ` · ${g.procesos_totales - g.procesos_medidos} sin mediciones`
+          : ""
+      }</span>
     </article>
 
     <article class="tarjeta-sintesis ${g.indicadores_desviados ? "bajo" : ""}">
@@ -353,17 +357,27 @@ function pintarEvolucion() {
           pointHoverRadius: 6,
         },
         {
-          label: "Meta de referencia",
-          data: serie.map(() => 90),
-          borderColor: COLORES.ambar,
-          borderDash: [6, 4],
-          borderWidth: 1.5,
-          pointRadius: 0,
+          label: "Margen sobre la meta",
+          data: serie.map((p) => p.holgura),
+          borderColor: COLORES.verde,
+          borderWidth: 2,
+          borderDash: [5, 3],
+          tension: 0.32,
           fill: false,
+          pointBackgroundColor: "#fff",
+          pointBorderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
         },
       ],
     },
-    options: opcionesGrafico("%", rangoSerie(serie.map((p) => p.cumplimiento), 90)),
+    options: opcionesGrafico(
+      "%",
+      rangoSerie([
+        ...serie.map((p) => p.cumplimiento),
+        ...serie.map((p) => p.holgura),
+      ])
+    ),
   });
 }
 

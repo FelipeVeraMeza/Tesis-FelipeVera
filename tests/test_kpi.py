@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 from app.kpi import (  # noqa: E402
     analizar_tendencia,
     evaluar_estado,
+    holgura,
     porcentaje_cumplimiento,
     proyectar,
 )
@@ -94,13 +95,14 @@ class TestPorcentajeCumplimiento:
         assert porcentaje_cumplimiento(None, 90, ASCENDENTE) is None
         assert porcentaje_cumplimiento(50, None, ASCENDENTE) is None
 
-    def test_meta_negativa_no_produce_valores_absurdos(self):
+    def test_meta_negativa(self):
         """
-        Las metas negativas, como las desviaciones de cartera, no admiten
-        una razón directa entre valor y meta.
+        Las metas negativas expresan un límite tolerado: mantenerse dentro
+        de esa magnitud constituye cumplimiento pleno, y excederla reduce
+        el resultado en proporción.
         """
         assert porcentaje_cumplimiento(-3, -5, ASCENDENTE) == 100.0
-        assert porcentaje_cumplimiento(-8, -5, ASCENDENTE) is None
+        assert porcentaje_cumplimiento(-10, -5, ASCENDENTE) == 50.0
 
     def test_meta_cero(self):
         """Con meta cero el cumplimiento se resuelve por el estado."""
@@ -212,3 +214,86 @@ class TestCasoReal:
         """Un porcentaje proyectado nunca puede ser menor que cero."""
         analisis = analizar_tendencia(self.SERIE, limite_inferior=0, limite_superior=100)
         assert analisis["proyeccion"] >= 0
+
+
+# ==================================================================
+# Metas expresadas como límite negativo
+# ==================================================================
+class TestMetasNegativas:
+    """
+    Algunos indicadores expresan su meta como una desviación máxima
+    tolerada. En «Desviación de la cartera de proyectos», por ejemplo, la
+    meta es −5 %: acercarse a cero representa un mejor desempeño, y
+    alejarse, uno peor.
+    """
+
+    META = -5.0
+
+    @pytest.mark.parametrize(
+        "valor, esperado",
+        [
+            (-2, "cumple"),   # menor desviación que el límite
+            (-3, "cumple"),   # dentro del límite
+            (-5, "cumple"),   # exactamente en el límite
+            (-6, "riesgo"),   # levemente por encima
+            (-9, "bajo"),     # muy por encima
+        ],
+    )
+    def test_clasificacion(self, valor, esperado):
+        assert evaluar_estado(valor, self.META, ASCENDENTE) == esperado
+
+    def test_dentro_del_limite_es_cumplimiento_pleno(self):
+        assert porcentaje_cumplimiento(-3, self.META, ASCENDENTE) == 100.0
+
+    def test_fuera_del_limite_reduce_el_cumplimiento(self):
+        assert porcentaje_cumplimiento(-10, self.META, ASCENDENTE) == 50.0
+
+    def test_la_holgura_es_positiva_dentro_del_limite(self):
+        assert holgura(-3, self.META, ASCENDENTE) == 40.0
+
+    def test_la_holgura_es_negativa_fuera_del_limite(self):
+        assert holgura(-6, self.META, ASCENDENTE) == -20.0
+
+
+# ==================================================================
+# Margen respecto a la meta
+# ==================================================================
+class TestHolgura:
+    """
+    El cumplimiento se acota a 100 %, de modo que no distingue entre
+    alcanzar la meta y superarla holgadamente. La holgura conserva esa
+    distancia.
+    """
+
+    def test_meta_ascendente_superada(self):
+        """Con meta 90 y valor 99, el margen es del 10 %."""
+        assert holgura(99, 90, ASCENDENTE) == 10.0
+
+    def test_meta_ascendente_incumplida(self):
+        assert holgura(81, 90, ASCENDENTE) == -10.0
+
+    def test_meta_descendente_superada(self):
+        """Con meta 20 y valor 15, el margen es del 25 %."""
+        assert holgura(15, 20, DESCENDENTE) == 25.0
+
+    def test_meta_descendente_incumplida(self):
+        assert holgura(25, 20, DESCENDENTE) == -25.0
+
+    def test_exactamente_en_la_meta(self):
+        assert holgura(90, 90, ASCENDENTE) == 0.0
+
+    def test_sin_datos(self):
+        assert holgura(None, 90, ASCENDENTE) is None
+        assert holgura(50, None, ASCENDENTE) is None
+        assert holgura(50, 0, ASCENDENTE) is None
+
+    def test_distingue_lo_que_el_cumplimiento_iguala(self):
+        """
+        Dos indicadores que cumplen su meta con márgenes distintos
+        comparten el mismo cumplimiento, pero no la misma holgura.
+        """
+        ajustado = porcentaje_cumplimiento(20, 20, DESCENDENTE)
+        holgado = porcentaje_cumplimiento(10, 20, DESCENDENTE)
+
+        assert ajustado == holgado == 100.0
+        assert holgura(20, 20, DESCENDENTE) < holgura(10, 20, DESCENDENTE)

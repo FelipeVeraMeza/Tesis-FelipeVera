@@ -24,6 +24,15 @@ def evaluar_estado(valor: float | None, meta: float | None, tipo_medicion: int) 
     if valor is None or meta is None:
         return "sin_datos"
 
+    # Las metas negativas expresan un limite tolerado —por ejemplo, una
+    # desviacion maxima de -5 %—, de modo que acercarse a cero constituye un
+    # mejor desempeno. La comparacion se hace sobre la magnitud.
+    if meta < 0:
+        if abs(valor) <= abs(meta):
+            return "cumple"
+        margen = abs(meta) * (2 - UMBRAL_RIESGO)
+        return "riesgo" if abs(valor) <= margen else "bajo"
+
     if tipo_medicion == 2:
         if valor <= meta:
             return "cumple"
@@ -48,6 +57,13 @@ def porcentaje_cumplimiento(valor: float | None, meta: float | None, tipo_medici
     # Con meta cero, el cumplimiento se evalua por el estado y no por razon
     if meta == 0:
         return 100.0 if evaluar_estado(valor, meta, tipo_medicion) == "cumple" else 0.0
+
+    # Metas negativas: el limite se compara en magnitud, ya que acercarse a
+    # cero representa un mejor desempeno
+    if meta < 0:
+        if abs(valor) <= abs(meta):
+            return 100.0
+        return round(abs(meta) / abs(valor) * 100, 1) if valor else 100.0
 
     if tipo_medicion == 2:
         # Metas descendentes: alcanzar o bajar de la meta es cumplimiento pleno
@@ -251,6 +267,7 @@ def obtener_kpis(codigo_proceso: str | None = None) -> list[dict]:
                 "tipo_grafico": NOMBRES_GRAFICO.get(int(kpi.get("tipo_grafico") or 1), "bar"),
                 "estado": evaluar_estado(valor_actual, meta, tipo_medicion),
                 "cumplimiento": porcentaje_cumplimiento(valor_actual, meta, tipo_medicion),
+                "holgura": holgura(valor_actual, meta, tipo_medicion),
                 "proyeccion": tendencia_serie["proyeccion"] if tendencia_serie else None,
                 "analisis": tendencia_serie,
                 "proceso": proceso.get("codigo_proceso"),
@@ -385,10 +402,10 @@ def estado_general(codigo_proceso: str | None = None) -> dict:
     # que disponen de al menos dos mediciones
     variacion = _variacion_periodo(medidos)
 
-    procesos_en_meta = [
-        p for p in procesos
-        if p["cumplimiento_promedio"] is not None and p["cumplimiento_promedio"] >= 90
-    ]
+    # Un proceso sin mediciones no se cuenta entre los evaluados: informarlo
+    # como fuera de meta atribuiria un incumplimiento que no consta
+    procesos_medidos = [p for p in procesos if p["cumplimiento_promedio"] is not None]
+    procesos_en_meta = [p for p in procesos_medidos if p["cumplimiento_promedio"] >= 90]
 
     periodos = periodos_disponibles()
 
@@ -401,6 +418,7 @@ def estado_general(codigo_proceso: str | None = None) -> dict:
         "indicadores_desviados": len(desviados),
         "indicadores_criticos": len(criticos),
         "procesos_totales": len(procesos),
+        "procesos_medidos": len(procesos_medidos),
         "procesos_en_meta": len(procesos_en_meta),
         "periodo_actual": periodos[0] if periodos else None,
         "periodos": periodos,
@@ -432,31 +450,74 @@ def _variacion_periodo(indicadores: list[dict]) -> float | None:
     return round(sum(actuales) / len(actuales) - sum(previos) / len(previos), 1)
 
 
+def holgura(valor: float | None, meta: float | None, tipo_medicion: int) -> float | None:
+    """
+    Margen del indicador respecto a su meta, en porcentaje.
+
+    El cumplimiento se acota a 100 %, de modo que un conjunto de indicadores
+    que superan holgadamente su meta se ve siempre en el mismo nivel. La
+    holgura conserva esa distancia: valores positivos indican margen por sobre
+    la meta y negativos, una brecha por debajo.
+
+    Un indicador con meta 20 que mide 15 tiene una holgura de +25 %; si mide
+    25, la holgura es de −25 %.
+    """
+    if valor is None or meta in (None, 0):
+        return None
+
+    # Con metas negativas el margen se mide sobre la magnitud del limite
+    if meta < 0:
+        diferencia = abs(meta) - abs(valor)
+    else:
+        diferencia = (meta - valor) if tipo_medicion == 2 else (valor - meta)
+
+    return round(diferencia / abs(meta) * 100, 1)
+
+
 def evolucion_cumplimiento(codigo_proceso: str | None = None) -> list[dict]:
     """
-    Cumplimiento promedio por período, para el gráfico de evolución.
+    Evolución del desempeño del conjunto, período a período.
 
-    Permite observar si el desempeño del conjunto mejora o se deteriora, más
-    allá del resultado de cada indicador por separado.
+    Entrega dos lecturas complementarias:
+
+      cumplimiento  proporcion de la meta alcanzada, acotada a 100 %
+      holgura       margen promedio respecto a la meta, sin acotar
+
+    La segunda permite observar si el desempeño se acerca o se aleja de sus
+    metas incluso cuando todos los indicadores las cumplen.
     """
     indicadores = obtener_kpis(codigo_proceso)
 
-    por_periodo: dict[str, list[float]] = {}
+    cumplimientos: dict[str, list[float]] = {}
+    holguras: dict[str, list[float]] = {}
+
     for kpi in indicadores:
         if kpi["meta"] is None:
             continue
+
         for punto in kpi["historico"]:
+            periodo = punto["periodo"]
+
             cumplimiento = porcentaje_cumplimiento(
                 punto["valor"], kpi["meta"], kpi["tipo_medicion"]
             )
             if cumplimiento is not None:
-                por_periodo.setdefault(punto["periodo"], []).append(cumplimiento)
+                cumplimientos.setdefault(periodo, []).append(cumplimiento)
+
+            margen = holgura(punto["valor"], kpi["meta"], kpi["tipo_medicion"])
+            if margen is not None:
+                holguras.setdefault(periodo, []).append(margen)
 
     return [
         {
             "periodo": periodo,
             "cumplimiento": round(sum(valores) / len(valores), 1),
+            "holgura": (
+                round(sum(holguras[periodo]) / len(holguras[periodo]), 1)
+                if holguras.get(periodo)
+                else None
+            ),
             "indicadores": len(valores),
         }
-        for periodo, valores in sorted(por_periodo.items())
+        for periodo, valores in sorted(cumplimientos.items())
     ]
