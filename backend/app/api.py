@@ -102,6 +102,25 @@ def crear_app() -> Flask:
     def resumen():
         return jsonify(kpi.resumen_por_proceso())
 
+    @app.get("/api/estado-general")
+    @auth.requiere_sesion
+    def estado_general():
+        """Sintesis del desempeno para el encabezado del panel."""
+        proceso = request.args.get("proceso", "general")
+        return jsonify(kpi.estado_general(proceso))
+
+    @app.get("/api/evolucion")
+    @auth.requiere_sesion
+    def evolucion():
+        """Cumplimiento promedio por periodo, para el grafico de evolucion."""
+        proceso = request.args.get("proceso", "general")
+        return jsonify(kpi.evolucion_cumplimiento(proceso))
+
+    @app.get("/api/periodos")
+    @auth.requiere_sesion
+    def periodos():
+        return jsonify(kpi.periodos_disponibles())
+
     # --------------------------------------------------------------
     # Alertas automaticas (RF7)
     # --------------------------------------------------------------

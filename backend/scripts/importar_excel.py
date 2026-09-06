@@ -249,8 +249,28 @@ def construir_registros(df: pd.DataFrame) -> tuple[list, list, list]:
             }
         )
 
-        for columna, periodo in COLUMNAS_MES.items():
-            valor = numero(registro.get(columna))
+        # Los indicadores que la planilla marca como no implementados llevan
+        # ceros de relleno en las columnas mensuales. Registrarlos como
+        # mediciones daria a entender que el proceso rinde cero, cuando en
+        # realidad el indicador aun no se instrumenta.
+        if normalizar(registro.get("Estado")) != "implementado":
+            continue
+
+        mensuales = {
+            periodo: numero(registro.get(columna))
+            for columna, periodo in COLUMNAS_MES.items()
+        }
+        medidos = [v for v in mensuales.values() if v is not None]
+
+        # Una serie compuesta unicamente por ceros no refleja desempeno: son
+        # celdas de relleno de un indicador que aun no se instrumenta. En
+        # cambio, un cero dentro de una serie con valores reales si es una
+        # medicion valida, y a menudo representa una mejora.
+        serie_vacia = bool(medidos) and not any(medidos)
+        if serie_vacia:
+            continue
+
+        for periodo, valor in mensuales.items():
             if valor is None:
                 continue
             resultados.append((codigo_kpi, periodo, round(valor * factor, 2)))

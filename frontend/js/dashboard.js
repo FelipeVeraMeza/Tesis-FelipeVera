@@ -1,7 +1,11 @@
 /* ============================================================
-   Panel de control de KPIs
-   Visualizacion adaptada al perfil del usuario (RF5), alertas
-   automaticas (RF7), carga de datos (RF1) y exportacion (RF6).
+   Panel de análisis del desempeño de procesos TI
+
+   La aplicación se organiza en vistas que responden preguntas
+   distintas —estado general, análisis por proceso, catálogo de
+   indicadores, evolución histórica, alertas y reportes— y
+   comparten un mismo conjunto de filtros, de modo que el
+   contexto se conserva al cambiar de vista.
    ============================================================ */
 
 const usuario = API.obtenerUsuario();
@@ -9,34 +13,27 @@ if (!API.obtenerToken() || !usuario) {
   window.location.replace("login.html");
 }
 
+const PERMISOS = usuario.permisos || {};
+const PUEDE_NOTIFICAR = PERMISOS.puede_notificar === true;
+
 const ETIQUETAS_ESTADO = {
-  cumple:    "Cumple",
-  riesgo:    "En riesgo",
-  bajo:      "Bajo desempeño",
+  cumple: "Cumple",
+  riesgo: "En riesgo",
+  bajo: "Bajo desempeño",
   sin_datos: "Sin datos",
 };
 
 const COLORES = {
-  azul:  "#14446e",
+  azul: "#14446e",
+  azulClaro: "#3282b8",
   verde: "#177243",
   ambar: "#8a5c0d",
-  rojo:  "#b93b3b",
+  rojo: "#b93b3b",
+  gris: "#5c6b7d",
 };
 
-const PERMISOS = usuario.permisos || {};
-
-// El envío de alertas corresponde al Gerente y al Líder de TI (RF7)
-const PUEDE_NOTIFICAR = PERMISOS.puede_notificar === true;
-
-/* Enfoque del panel según el perfil, conforme a los usuarios definidos
-   en el alcance del proyecto (RF5). */
-/* Los dashboards se organizan en dos niveles jerárquicos:
-
-   - Nivel estratégico: dirigido a la Gerencia de TI, integra la
-     información global de los procesos.
-   - Nivel táctico: orientado a los responsables de proceso, con el
-     detalle por tipo de gestión. */
-const VISTAS = {
+/* Cada perfil accede a un enfoque distinto del panel (RF5) */
+const VISTAS_PERFIL = {
   ejecutiva: {
     titulo: "Vista ejecutiva",
     descripcion: "Estado global de los procesos y cumplimiento de objetivos estratégicos",
@@ -63,436 +60,588 @@ const VISTAS = {
   },
 };
 
-const VISTA = VISTAS[PERMISOS.vista] || VISTAS.detallada;
-
-let kpisActuales = [];
-let grafico = null;
-let kpiEnAlerta = null;
+const PERFIL = VISTAS_PERFIL[PERMISOS.vista] || VISTAS_PERFIL.detallada;
 
 /* ------------------------------------------------------------
-   Selector de procesos
+   Estado de la aplicación
 
-   El catálogo proviene del levantamiento realizado en la Gerencia
-   de TI, por lo que las opciones se construyen desde la base de
-   datos y no se fijan en el HTML.
+   Se mantiene en un único lugar para que todas las vistas
+   reflejen el mismo contexto de filtros.
    ------------------------------------------------------------ */
-async function cargarSelectorProcesos() {
-  const selector = document.getElementById("selectorProceso");
+const estado = {
+  vista: "resumen",
+  filtros: {
+    proceso: PERFIL.soloCriticos ? "criticos" : "general",
+    estado: "todos",
+    busqueda: "",
+    severidad: "todas",
+  },
+  datos: {
+    kpis: [],
+    resumen: [],
+    alertas: [],
+    general: null,
+    evolucion: [],
+    procesos: [],
+  },
+  procesoAbierto: null,
+  indicadorTendencia: null,
+  kpiEnAlerta: null,
+};
 
-  try {
-    const procesos = await API.procesos();
-
-    const criticos = procesos.filter((p) => p.critico);
-    const resto = procesos.filter((p) => !p.critico);
-
-    const opciones = (lista) =>
-      lista
-        .map((p) => `<option value="${p.codigo_proceso}">${p.nombre_proceso}</option>`)
-        .join("");
-
-    // Los perfiles ejecutivo y consolidado se centran en los procesos
-    // críticos; el resto del catálogo queda accesible igualmente
-    const etiquetaGeneral = VISTA.soloCriticos
-      ? "Procesos críticos"
-      : "Todos los procesos";
-
-    selector.innerHTML =
-      `<option value="${VISTA.soloCriticos ? "criticos" : "general"}" selected>${etiquetaGeneral}</option>` +
-      (VISTA.soloCriticos
-        ? '<option value="general">Todos los procesos</option>'
-        : "") +
-      (criticos.length
-        ? `<optgroup label="Procesos críticos">${opciones(criticos)}</optgroup>`
-        : "") +
-      (resto.length
-        ? `<optgroup label="Otros procesos">${opciones(resto)}</optgroup>`
-        : "");
-  } catch {
-    // Si falla, el selector conserva la opción general
-  }
-}
+const graficos = { evolucion: null, tendencia: null };
 
 /* ------------------------------------------------------------
-   Utilidades de formato
+   Utilidades
    ------------------------------------------------------------ */
+const $ = (id) => document.getElementById(id);
+
 function formatearValor(valor, unidad) {
   if (valor === null || valor === undefined) return "—";
   const numero = Number(valor);
   const texto = Number.isInteger(numero) ? numero.toString() : numero.toFixed(2);
   if (unidad === "%") return `${texto} %`;
-  if (unidad === "cantidad") return texto;
-  return `${texto} ${unidad || ""}`.trim();
+  if (unidad === "cantidad" || !unidad) return texto;
+  return `${texto} ${unidad}`;
 }
 
-function colorEstado(estado) {
-  return { cumple: COLORES.verde, riesgo: COLORES.ambar, bajo: COLORES.rojo }[estado] || COLORES.azul;
+function colorEstado(estadoKpi) {
+  return (
+    { cumple: COLORES.verde, riesgo: COLORES.ambar, bajo: COLORES.rojo }[estadoKpi] ||
+    COLORES.gris
+  );
+}
+
+function escaparHtml(texto) {
+  const div = document.createElement("div");
+  div.textContent = texto ?? "";
+  return div.innerHTML;
+}
+
+function flechaTendencia(kpi) {
+  return kpi.tendencia === "ascendente" ? "↑" : "↓";
+}
+
+/* Aplica los filtros globales sobre la lista de indicadores */
+function kpisFiltrados() {
+  const { estado: filtroEstado, busqueda } = estado.filtros;
+  const texto = busqueda.trim().toLowerCase();
+
+  return estado.datos.kpis.filter((kpi) => {
+    if (filtroEstado !== "todos" && kpi.estado !== filtroEstado) return false;
+    if (!texto) return true;
+    return (
+      kpi.nombre.toLowerCase().includes(texto) ||
+      (kpi.proceso_nombre || "").toLowerCase().includes(texto)
+    );
+  });
 }
 
 /* ------------------------------------------------------------
-   Encabezado y permisos
+   Navegación entre vistas
    ------------------------------------------------------------ */
-function prepararSesion() {
-  document.getElementById("usuarioNombre").textContent = usuario.nombre;
-  document.getElementById("usuarioRol").textContent = usuario.rol;
+function irA(vista, opciones = {}) {
+  estado.vista = vista;
 
-  // El encabezado identifica el enfoque del panel y su nivel jerárquico
-  document.getElementById("tituloVista").textContent = VISTA.titulo;
-  document.getElementById("descripcionVista").textContent = VISTA.descripcion;
-  document.getElementById("nivelVista").textContent = `Nivel ${VISTA.nivel}`;
+  document.querySelectorAll(".pestana").forEach((boton) => {
+    boton.classList.toggle("activa", boton.dataset.vista === vista);
+  });
 
-  // La carga de archivos solo está disponible para quien tiene ese permiso
-  if (PERMISOS.puede_cargar) {
-    document.getElementById("seccionCarga").classList.remove("oculto");
-  }
+  document.querySelectorAll(".vista").forEach((seccion) => {
+    seccion.classList.toggle("activa", seccion.id === `vista-${vista}`);
+  });
 
-  if (!PERMISOS.puede_exportar) {
-    document.getElementById("btnExportar").classList.add("oculto");
-  }
+  // Cada vista se dibuja al mostrarse, para reflejar los filtros vigentes
+  const pintar = {
+    resumen: pintarResumen,
+    procesos: pintarProcesos,
+    indicadores: pintarIndicadores,
+    tendencias: pintarTendencias,
+    alertas: pintarAlertas,
+    reportes: pintarReportes,
+  }[vista];
 
-  // Los perfiles con foco en los procesos críticos parten con esa vista
-  if (VISTA.soloCriticos) {
-    document.getElementById("selectorProceso").dataset.foco = "criticos";
-  }
+  if (pintar) pintar(opciones);
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 /* ------------------------------------------------------------
-   Tarjetas de cumplimiento por proceso
+   Carga de datos
    ------------------------------------------------------------ */
-function pintarResumen(resumen) {
-  const contenedor = document.getElementById("tarjetasResumen");
+async function cargarDatos() {
+  const proceso = estado.filtros.proceso;
 
-  if (!resumen.length) {
-    contenedor.innerHTML =
-      '<p class="estado-carga">No hay procesos registrados en la base de datos.</p>';
+  try {
+    const [kpis, resumen, alertas, general, evolucion] = await Promise.all([
+      API.kpis(proceso),
+      API.resumen(),
+      API.alertas(),
+      API.estadoGeneral(proceso),
+      API.evolucion(proceso),
+    ]);
+
+    Object.assign(estado.datos, { kpis, resumen, alertas, general, evolucion });
+
+    actualizarContadorAlertas();
+    actualizarContexto();
+    irA(estado.vista);
+  } catch (error) {
+    $("tarjetasSintesis").innerHTML =
+      `<p class="estado-carga">No se pudieron obtener los datos: ${escaparHtml(error.message)}</p>`;
+  }
+}
+
+function actualizarContadorAlertas() {
+  const total = estado.datos.alertas.length;
+
+  for (const id of ["contadorAlertas", "pestanaAlertasBadge"]) {
+    const elemento = $(id);
+    elemento.textContent = total;
+    elemento.classList.toggle("oculto", total === 0);
+  }
+}
+
+function actualizarContexto() {
+  const selector = $("filtroProceso");
+  const nombre = selector.options[selector.selectedIndex]?.textContent || "";
+  const { estado: filtroEstado, busqueda } = estado.filtros;
+
+  const partes = [nombre];
+  if (filtroEstado !== "todos") partes.push(ETIQUETAS_ESTADO[filtroEstado]);
+  if (busqueda.trim()) partes.push(`«${busqueda.trim()}»`);
+
+  $("contextoFiltro").textContent = partes.join(" · ");
+}
+
+/* ============================================================
+   VISTA · RESUMEN
+   ============================================================ */
+function pintarResumen() {
+  const g = estado.datos.general;
+  if (!g) return;
+
+  $("tituloVista").textContent = PERFIL.titulo;
+  $("descripcionVista").textContent = PERFIL.descripcion;
+  $("nivelVista").textContent = `Nivel ${PERFIL.nivel}`;
+
+  pintarSintesis(g);
+  pintarAtencion();
+  pintarEvolucion();
+  pintarBarrasProcesos();
+}
+
+function pintarSintesis(g) {
+  const variacion =
+    g.variacion === null || g.variacion === undefined
+      ? '<span class="sintesis-nota">sin período previo</span>'
+      : `<span class="sintesis-nota ${g.variacion >= 0 ? "positiva" : "negativa"}">
+           ${g.variacion >= 0 ? "▲" : "▼"} ${Math.abs(g.variacion)} pp respecto al período anterior
+         </span>`;
+
+  const claseGlobal =
+    g.cumplimiento_global === null
+      ? ""
+      : g.cumplimiento_global >= 90
+      ? "cumple"
+      : g.cumplimiento_global >= 75
+      ? "riesgo"
+      : "bajo";
+
+  $("tarjetasSintesis").innerHTML = `
+    <article class="tarjeta-sintesis ${claseGlobal}">
+      <span class="sintesis-rotulo">Cumplimiento global</span>
+      <span class="sintesis-cifra">${g.cumplimiento_global !== null ? g.cumplimiento_global + " %" : "—"}</span>
+      ${variacion}
+    </article>
+
+    <article class="tarjeta-sintesis">
+      <span class="sintesis-rotulo">Indicadores</span>
+      <span class="sintesis-cifra">${g.indicadores_cumplen}<small>/${g.indicadores_medidos}</small></span>
+      <span class="sintesis-nota">cumplen su meta · ${g.indicadores_totales} definidos</span>
+    </article>
+
+    <article class="tarjeta-sintesis">
+      <span class="sintesis-rotulo">Procesos</span>
+      <span class="sintesis-cifra">${g.procesos_en_meta}<small>/${g.procesos_totales}</small></span>
+      <span class="sintesis-nota">dentro de meta</span>
+    </article>
+
+    <article class="tarjeta-sintesis ${g.indicadores_desviados ? "bajo" : ""}">
+      <span class="sintesis-rotulo">Requieren atención</span>
+      <span class="sintesis-cifra">${g.indicadores_desviados}</span>
+      <span class="sintesis-nota">${g.indicadores_criticos} en estado crítico</span>
+    </article>
+
+    <article class="tarjeta-sintesis">
+      <span class="sintesis-rotulo">Último período</span>
+      <span class="sintesis-cifra periodo">${g.periodo_actual || "—"}</span>
+      <span class="sintesis-nota">${g.periodos.length} períodos registrados</span>
+    </article>`;
+}
+
+function pintarAtencion() {
+  const bloque = $("bloqueAtencion");
+  const criticas = estado.datos.alertas.filter((a) => a.estado === "bajo").slice(0, 4);
+
+  if (!criticas.length) {
+    bloque.classList.add("oculto");
     return;
   }
 
-  // Con el catálogo completo, el panel destaca los procesos críticos
-  const criticos = resumen.filter((b) => b.critico);
-  const visibles = criticos.length ? criticos : resumen;
-
-  contenedor.innerHTML = visibles
-    .map((bloque) => {
-      const promedio = bloque.cumplimiento_promedio;
-      let clase = "";
-      if (promedio !== null) {
-        clase = promedio >= 90 ? "cumple" : promedio >= 75 ? "riesgo" : "bajo";
-      }
-
-      let detalle;
-      if (bloque.kpis_medidos === 0) {
-        detalle = `Sin mediciones · ${bloque.total_kpis} indicadores definidos`;
-      } else if (bloque.en_alerta > 0) {
-        detalle = `${bloque.en_alerta} de ${bloque.kpis_medidos} indicadores fuera de meta`;
-      } else {
-        detalle = `${bloque.kpis_medidos} indicadores dentro de meta`;
-      }
-
-      const cobertura =
-        bloque.kpis_medidos < bloque.total_kpis
-          ? `<span class="tarjeta-cobertura">${bloque.kpis_medidos}/${bloque.total_kpis} medidos</span>`
-          : "";
+  $("listaAtencion").innerHTML = criticas
+    .map((a) => {
+      const brecha =
+        a.meta !== null && a.valor !== null
+          ? `${(a.valor - a.meta).toFixed(1)} ${a.unidad === "%" ? "pp" : ""}`
+          : "—";
 
       return `
-        <article class="tarjeta ${clase}">
-          <h3>${bloque.nombre}</h3>
-          <p class="tarjeta-valor">${promedio !== null ? promedio + " %" : "—"}</p>
-          <span class="tarjeta-detalle">${detalle}</span>
-          ${cobertura}
+        <article class="fila-atencion">
+          <span class="marca-severidad ${a.estado}"></span>
+          <div class="atencion-texto">
+            <strong>${escaparHtml(a.kpi)}</strong>
+            <span>${escaparHtml(a.proceso)}</span>
+          </div>
+          <div class="atencion-cifras">
+            <span class="valor-actual">${formatearValor(a.valor, a.unidad)}</span>
+            <span class="valor-meta">meta ${formatearValor(a.meta, a.unidad)}</span>
+          </div>
+          <span class="atencion-brecha">${brecha}</span>
+          <button class="btn-secundario" data-analizar="${a.id_kpi}">Analizar</button>
         </article>`;
     })
     .join("");
+
+  bloque.classList.remove("oculto");
 }
 
-/* ------------------------------------------------------------
-   Alertas automaticas (RF7)
-   ------------------------------------------------------------ */
-function pintarAlertas(alertas) {
-  const panel = document.getElementById("panelAlertas");
-  const lista = document.getElementById("listaAlertas");
+function pintarEvolucion() {
+  const serie = estado.datos.evolucion;
+  const lienzo = $("graficoEvolucion");
 
-  if (!alertas.length) {
-    panel.classList.add("oculto");
+  if (graficos.evolucion) graficos.evolucion.destroy();
+  if (!serie.length) return;
+
+  graficos.evolucion = new Chart(lienzo.getContext("2d"), {
+    type: "line",
+    data: {
+      labels: serie.map((p) => p.periodo),
+      datasets: [
+        {
+          label: "Cumplimiento promedio",
+          data: serie.map((p) => p.cumplimiento),
+          borderColor: COLORES.azul,
+          backgroundColor: "rgba(20, 68, 110, .07)",
+          borderWidth: 2.5,
+          tension: 0.32,
+          fill: true,
+          pointBackgroundColor: "#fff",
+          pointBorderWidth: 2,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        },
+        {
+          label: "Meta de referencia",
+          data: serie.map(() => 90),
+          borderColor: COLORES.ambar,
+          borderDash: [6, 4],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false,
+        },
+      ],
+    },
+    options: opcionesGrafico("%", { maximo: 105 }),
+  });
+}
+
+function pintarBarrasProcesos() {
+  const contenedor = $("barrasProcesos");
+  let procesos = estado.datos.resumen;
+
+  if (estado.filtros.proceso === "criticos") {
+    procesos = procesos.filter((p) => p.critico);
+  } else if (estado.filtros.proceso !== "general") {
+    procesos = procesos.filter((p) => p.proceso === estado.filtros.proceso);
+  }
+
+  const conDatos = procesos.filter((p) => p.cumplimiento_promedio !== null);
+
+  if (!conDatos.length) {
+    contenedor.innerHTML = '<p class="estado-carga">Sin mediciones para el filtro actual.</p>';
     return;
   }
 
-  lista.innerHTML = alertas
-    .map((a) => {
-      const boton = PUEDE_NOTIFICAR
-        ? `<button class="btn-sirena ${a.estado === "bajo" ? "severa" : ""}"
-                   data-alerta-kpi="${a.id_kpi}"
-                   title="Notificar a ${a.dueno_proceso || "el responsable"}"
-                   aria-label="Notificar desviación de ${a.kpi}">🚨</button>`
-        : "";
+  contenedor.innerHTML = conDatos
+    .sort((a, b) => a.cumplimiento_promedio - b.cumplimiento_promedio)
+    .map((p) => {
+      const valor = p.cumplimiento_promedio;
+      const clase = valor >= 90 ? "cumple" : valor >= 75 ? "riesgo" : "bajo";
 
-      return `<li>
-        <strong>${a.proceso}</strong> · ${a.kpi}: ${formatearValor(a.valor, a.unidad)}
-        (meta ${formatearValor(a.meta, a.unidad)}) — ${ETIQUETAS_ESTADO[a.estado]}
-        ${boton}
-      </li>`;
+      return `
+        <div class="barra-proceso" data-proceso="${p.proceso}" role="button" tabindex="0">
+          <div class="barra-cabecera">
+            <span class="barra-nombre">${escaparHtml(p.nombre)}</span>
+            <span class="barra-valor ${clase}">${valor} %</span>
+          </div>
+          <div class="barra-pista">
+            <div class="barra-relleno ${clase}" style="width:${Math.min(valor, 100)}%"></div>
+          </div>
+          <span class="barra-nota">
+            ${p.kpis_medidos - p.en_alerta} de ${p.kpis_medidos} indicadores dentro de meta
+          </span>
+        </div>`;
+    })
+    .join("");
+}
+
+/* ============================================================
+   VISTA · PROCESOS
+   ============================================================ */
+function pintarProcesos() {
+  const contenedor = $("tarjetasProcesos");
+  let procesos = estado.datos.resumen;
+
+  if (estado.filtros.proceso === "criticos") {
+    procesos = procesos.filter((p) => p.critico);
+  } else if (estado.filtros.proceso !== "general") {
+    procesos = procesos.filter((p) => p.proceso === estado.filtros.proceso);
+  }
+
+  if (!procesos.length) {
+    contenedor.innerHTML = '<p class="estado-carga">No hay procesos para el filtro actual.</p>';
+    return;
+  }
+
+  contenedor.innerHTML = procesos
+    .map((p) => {
+      const valor = p.cumplimiento_promedio;
+      const clase = valor === null ? "" : valor >= 90 ? "cumple" : valor >= 75 ? "riesgo" : "bajo";
+
+      const nota =
+        p.kpis_medidos === 0
+          ? `Sin mediciones · ${p.total_kpis} indicadores definidos`
+          : p.en_alerta > 0
+          ? `${p.en_alerta} de ${p.kpis_medidos} indicadores fuera de meta`
+          : `${p.kpis_medidos} indicadores dentro de meta`;
+
+      return `
+        <article class="tarjeta ${clase}" data-proceso="${p.proceso}" role="button" tabindex="0">
+          <h3>${escaparHtml(p.nombre)}${p.critico ? '<span class="insignia tenue">Crítico</span>' : ""}</h3>
+          <p class="tarjeta-valor">${valor !== null ? valor + " %" : "—"}</p>
+          <div class="barra-pista compacta">
+            <div class="barra-relleno ${clase}" style="width:${valor !== null ? Math.min(valor, 100) : 0}%"></div>
+          </div>
+          <span class="tarjeta-detalle">${nota}</span>
+          ${
+            p.kpis_medidos < p.total_kpis
+              ? `<span class="tarjeta-cobertura">${p.kpis_medidos}/${p.total_kpis} medidos</span>`
+              : ""
+          }
+        </article>`;
     })
     .join("");
 
-  panel.classList.remove("oculto");
+  if (estado.procesoAbierto) abrirProceso(estado.procesoAbierto);
 }
 
-/* ------------------------------------------------------------
-   Tabla de indicadores
-   ------------------------------------------------------------ */
-function pintarTabla(kpis) {
+async function abrirProceso(codigo) {
+  estado.procesoAbierto = codigo;
+
+  const bloque = estado.datos.resumen.find((p) => p.proceso === codigo);
+  if (!bloque) return;
+
+  $("tituloDetalleProceso").textContent = bloque.nombre;
+
+  let indicadores = estado.datos.kpis.filter((k) => k.proceso === codigo);
+
+  // Si el filtro global no incluye este proceso, se consultan sus indicadores
+  if (!indicadores.length) {
+    try {
+      indicadores = await API.kpis(codigo);
+    } catch {
+      indicadores = [];
+    }
+  }
+
+  const cuerpo = document.querySelector("#tablaProceso tbody");
+
+  cuerpo.innerHTML = indicadores.length
+    ? indicadores
+        .map(
+          (k) => `
+          <tr>
+            <td class="celda-indicador"><strong>${escaparHtml(k.nombre)}</strong></td>
+            <td class="valor-numerico">${formatearValor(k.valor, k.unidad)}</td>
+            <td class="valor-numerico">${formatearValor(k.meta, k.unidad)}</td>
+            <td class="celda-tendencia">${flechaTendencia(k)} ${k.tendencia}</td>
+            <td><span class="estado ${k.estado}">${ETIQUETAS_ESTADO[k.estado]}</span></td>
+            <td><button class="btn-secundario" data-detalle="${k.id_kpi}">Detalle</button></td>
+          </tr>`
+        )
+        .join("")
+    : '<tr><td colspan="6" class="estado-carga">Sin indicadores registrados.</td></tr>';
+
+  $("detalleProceso").classList.remove("oculto");
+  $("detalleProceso").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+/* ============================================================
+   VISTA · INDICADORES
+   ============================================================ */
+function pintarIndicadores() {
   const cuerpo = document.querySelector("#tablaKpis tbody");
-  const contador = document.getElementById("contadorKpis");
-  const soloMedidos = document.getElementById("soloMedidos").checked;
+  const visibles = kpisFiltrados();
+  const medidos = estado.datos.kpis.filter((k) => k.estado !== "sin_datos").length;
 
-  const visibles = soloMedidos ? kpis.filter((k) => k.estado !== "sin_datos") : kpis;
-  const medidos = kpis.filter((k) => k.estado !== "sin_datos").length;
-
-  contador.textContent =
-    `${medidos} de ${kpis.length} indicadores con medición registrada`;
+  $("contadorKpis").textContent =
+    `${visibles.length} de ${estado.datos.kpis.length} indicadores · ${medidos} con medición`;
 
   if (!visibles.length) {
-    cuerpo.innerHTML = `<tr><td colspan="9" class="estado-carga">${
-      kpis.length
-        ? "Ningún indicador de este proceso tiene mediciones registradas."
-        : "No hay indicadores para este proceso."
-    }</td></tr>`;
+    cuerpo.innerHTML =
+      '<tr><td colspan="8" class="estado-carga">Ningún indicador coincide con los filtros.</td></tr>';
     return;
   }
 
   cuerpo.innerHTML = visibles
     .map((kpi) => {
-      const flecha = kpi.tendencia === "ascendente" ? "↑ Mayor es mejor" : "↓ Menor es mejor";
-      const indice = kpisActuales.indexOf(kpi);
+      const implementado =
+        (kpi.estado_implementacion || "").toLowerCase() === "implementado";
 
-      // Los indicadores aún no implementados se distinguen del resto
-      const implementado = (kpi.estado_implementacion || "").toLowerCase() === "implementado";
       const marca = implementado
         ? ""
-        : `<span class="insignia tenue" title="${
-            kpi.viable === "Si" ? "Viable, pendiente de implementación" : "No viable de medir"
-          }">${kpi.viable === "Si" ? "Pendiente" : "No viable"}</span>`;
+        : `<span class="insignia tenue">${kpi.viable === "Si" ? "Pendiente" : "No viable"}</span>`;
 
-      // El control de alerta aparece solo ante desviaciones, y solo para
-      // quienes tienen atribución para notificar al responsable
       const desviado = kpi.estado === "riesgo" || kpi.estado === "bajo";
       const alerta =
         desviado && PUEDE_NOTIFICAR
           ? `<button class="btn-sirena ${kpi.estado === "bajo" ? "severa" : ""}"
-                     data-alerta="${indice}"
-                     title="Notificar al responsable del proceso"
-                     aria-label="Notificar desviación de ${kpi.nombre}">🚨</button>`
-          : desviado
-          ? '<span class="sin-alerta" title="Indicador fuera de meta">🚨</span>'
-          : '<span class="sin-alerta">—</span>';
+                     data-alerta="${kpi.id_kpi}" title="Notificar al responsable">🚨</button>`
+          : "";
+
+      const proyeccion = kpi.analisis
+        ? `${formatearValor(kpi.proyeccion, kpi.unidad)}
+           <small class="confianza ${kpi.analisis.confiabilidad}">R²=${kpi.analisis.r2}</small>`
+        : "—";
 
       return `
         <tr>
           <td class="celda-indicador">
-            <strong>${kpi.nombre}</strong>
-            <small>${kpi.descripcion || kpi.formula || ""}</small>
-          </td>
-          <td>
-            <span class="insignia">${kpi.proceso_nombre || "—"}</span>
+            <strong>${escaparHtml(kpi.nombre)}</strong>
             ${marca}
           </td>
+          <td><span class="insignia">${escaparHtml(kpi.proceso_nombre || "—")}</span></td>
           <td class="valor-numerico">${formatearValor(kpi.valor, kpi.unidad)}</td>
           <td class="valor-numerico">${formatearValor(kpi.meta, kpi.unidad)}</td>
-          <td>${flecha}</td>
+          <td class="celda-tendencia">${flechaTendencia(kpi)}</td>
           <td><span class="estado ${kpi.estado}">${ETIQUETAS_ESTADO[kpi.estado]}</span></td>
-          <td class="valor-numerico">
-            ${formatearValor(kpi.proyeccion, kpi.unidad)}
-            ${kpi.analisis
-              ? `<small class="confianza ${kpi.analisis.confiabilidad}"
-                        title="Ajuste de la tendencia: R²=${kpi.analisis.r2} sobre ${kpi.analisis.periodos} períodos">
-                   ${kpi.analisis.confiabilidad}
-                 </small>`
-              : ""}
-          </td>
-          <td>${alerta}</td>
-          <td>
-            ${kpi.historico.length
-              ? `<button class="btn-secundario" data-indice="${indice}">Ver gráfico</button>`
-              : ""}
+          <td class="valor-numerico">${proyeccion}</td>
+          <td class="celda-acciones">
+            ${alerta}
+            <button class="btn-secundario" data-detalle="${kpi.id_kpi}">Detalle</button>
           </td>
         </tr>`;
     })
     .join("");
 }
 
-/* ------------------------------------------------------------
-   Notificación de desviaciones (RF7)
+/* ============================================================
+   VISTA · TENDENCIAS
+   ============================================================ */
+function pintarTendencias(opciones = {}) {
+  const selector = $("selectorIndicador");
+  const conSerie = estado.datos.kpis.filter((k) => k.historico.length > 0);
 
-   Al accionar el control de alerta se despliega una ventana modal
-   que identifica el indicador y su proceso, y solicita confirmación
-   antes de notificar al responsable.
-   ------------------------------------------------------------ */
-function abrirModalAlerta(kpi) {
-  kpiEnAlerta = kpi;
-
-  document.getElementById("alertaKpi").textContent = kpi.nombre;
-  document.getElementById("alertaProceso").textContent = kpi.proceso_nombre || "—";
-  document.getElementById("alertaValor").textContent = formatearValor(kpi.valor, kpi.unidad);
-  document.getElementById("alertaMeta").textContent = formatearValor(kpi.meta, kpi.unidad);
-  document.getElementById("alertaDestinatario").textContent =
-    kpi.dueno_proceso || kpi.proceso_nombre || "Gerencia de TI";
-
-  const estado = document.getElementById("alertaEstado");
-  estado.innerHTML = `<span class="estado ${kpi.estado}">${ETIQUETAS_ESTADO[kpi.estado]}</span>`;
-
-  // Se parte siempre desde el paso de confirmación
-  document.getElementById("modalConfirmacion").classList.remove("oculto");
-  document.getElementById("modalResultado").classList.add("oculto");
-  document.getElementById("modalError").textContent = "";
-
-  const confirmar = document.getElementById("modalConfirmar");
-  confirmar.classList.remove("oculto");
-  confirmar.disabled = false;
-  confirmar.textContent = "Enviar notificación";
-  document.getElementById("modalCancelar").textContent = "Cancelar";
-
-  document.getElementById("modalAlerta").classList.remove("oculto");
-  confirmar.focus();
-}
-
-function cerrarModalAlerta() {
-  document.getElementById("modalAlerta").classList.add("oculto");
-  kpiEnAlerta = null;
-}
-
-async function confirmarNotificacion() {
-  if (!kpiEnAlerta) return;
-
-  const boton = document.getElementById("modalConfirmar");
-  const error = document.getElementById("modalError");
-
-  boton.disabled = true;
-  boton.textContent = "Enviando…";
-  error.textContent = "";
-
-  try {
-    const respuesta = await API.notificar(kpiEnAlerta.id_kpi);
-
-    document.getElementById("resultadoDetalle").textContent =
-      `Se notificó a ${respuesta.destinatario} sobre la desviación del indicador ` +
-      `«${respuesta.kpi}»` +
-      (respuesta.simulada
-        ? ". El envío por correo se encuentra simulado en esta etapa de prototipo."
-        : ".");
-
-    document.getElementById("resultadoMensaje").textContent = respuesta.mensaje;
-
-    document.getElementById("modalConfirmacion").classList.add("oculto");
-    document.getElementById("modalResultado").classList.remove("oculto");
-
-    boton.classList.add("oculto");
-    document.getElementById("modalCancelar").textContent = "Cerrar";
-  } catch (excepcion) {
-    error.textContent = excepcion.message;
-    boton.disabled = false;
-    boton.textContent = "Enviar notificación";
-  }
-}
-
-/* ------------------------------------------------------------
-   Registro de incidencias técnicas (RF8)
-   ------------------------------------------------------------ */
-function abrirModalIncidencia() {
-  document.getElementById("incidenciaFormulario").classList.remove("oculto");
-  document.getElementById("incidenciaResultado").classList.add("oculto");
-  document.getElementById("incidenciaError").textContent = "";
-
-  document.getElementById("incidenciaTituloCampo").value = "";
-  document.getElementById("incidenciaDescripcion").value = "";
-
-  const enviar = document.getElementById("incidenciaEnviar");
-  enviar.classList.remove("oculto");
-  enviar.disabled = false;
-  enviar.textContent = "Registrar incidencia";
-  document.getElementById("incidenciaCancelar").textContent = "Cancelar";
-
-  document.getElementById("modalIncidencia").classList.remove("oculto");
-  document.getElementById("incidenciaTituloCampo").focus();
-}
-
-function cerrarModalIncidencia() {
-  document.getElementById("modalIncidencia").classList.add("oculto");
-}
-
-async function enviarIncidencia() {
-  const enviar = document.getElementById("incidenciaEnviar");
-  const error = document.getElementById("incidenciaError");
-
-  const datos = {
-    modulo: document.getElementById("incidenciaModulo").value,
-    severidad: document.getElementById("incidenciaSeveridad").value,
-    titulo: document.getElementById("incidenciaTituloCampo").value.trim(),
-    descripcion: document.getElementById("incidenciaDescripcion").value.trim(),
-  };
-
-  // Se valida en el cliente para dar respuesta inmediata; el servidor
-  // vuelve a comprobarlo antes de registrar
-  if (datos.titulo.length < 5) {
-    error.textContent = "Indique un título de al menos 5 caracteres.";
-    return;
-  }
-  if (datos.descripcion.length < 10) {
-    error.textContent = "Describa la incidencia con al menos 10 caracteres.";
+  if (!conSerie.length) {
+    selector.innerHTML = '<option value="">Sin indicadores con mediciones</option>';
+    $("resumenTendencia").innerHTML = "";
+    $("fichaIndicador").innerHTML =
+      '<p class="estado-carga">No hay series históricas para el filtro actual.</p>';
+    if (graficos.tendencia) graficos.tendencia.destroy();
+    document.querySelector("#tablaMediciones tbody").innerHTML = "";
     return;
   }
 
-  enviar.disabled = true;
-  enviar.textContent = "Registrando…";
-  error.textContent = "";
+  selector.innerHTML = conSerie
+    .map((k) => `<option value="${k.id_kpi}">${escaparHtml(k.nombre)}</option>`)
+    .join("");
 
-  try {
-    const respuesta = await API.registrarIncidencia(datos);
+  const idSolicitado = opciones.idKpi || estado.indicadorTendencia;
+  const elegido =
+    conSerie.find((k) => k.id_kpi === Number(idSolicitado)) || conSerie[0];
 
-    document.getElementById("incidenciaDetalle").textContent =
-      `La incidencia N.º ${respuesta.id_incidencia} quedó registrada en estado ` +
-      `${respuesta.estado} y será revisada por el administrador del sistema.`;
-
-    document.getElementById("incidenciaFormulario").classList.add("oculto");
-    document.getElementById("incidenciaResultado").classList.remove("oculto");
-
-    enviar.classList.add("oculto");
-    document.getElementById("incidenciaCancelar").textContent = "Cerrar";
-  } catch (excepcion) {
-    error.textContent = excepcion.message;
-    enviar.disabled = false;
-    enviar.textContent = "Registrar incidencia";
-  }
+  selector.value = elegido.id_kpi;
+  mostrarTendencia(elegido);
 }
 
-/* ------------------------------------------------------------
-   Grafico del indicador seleccionado
-   ------------------------------------------------------------ */
-function mostrarGrafico(kpi) {
-  const seccion = document.getElementById("seccionGrafico");
-  const lienzo = document.getElementById("lienzoGrafico");
+function mostrarTendencia(kpi) {
+  estado.indicadorTendencia = kpi.id_kpi;
 
-  document.getElementById("tituloGrafico").textContent = `Evolución · ${kpi.nombre}`;
-
-  // Al detalle del indicador se suma la lectura estadística de su serie
   const a = kpi.analisis;
-  const analisis = a
-    ? ` — Tendencia ${a.direccion}, variación de ${a.pendiente > 0 ? "+" : ""}${a.pendiente} ` +
-      `por período sobre ${a.periodos} mediciones (R²=${a.r2}, confiabilidad ${a.confiabilidad})`
-    : " — Serie insuficiente para estimar una tendencia";
+  $("resumenTendencia").innerHTML = a
+    ? `
+      <div class="dato-tendencia">
+        <span>Dirección</span><strong>${a.direccion}</strong>
+      </div>
+      <div class="dato-tendencia">
+        <span>Variación por período</span>
+        <strong>${a.pendiente > 0 ? "+" : ""}${a.pendiente}</strong>
+      </div>
+      <div class="dato-tendencia">
+        <span>Ajuste (R²)</span>
+        <strong class="confianza ${a.confiabilidad}">${a.r2} · ${a.confiabilidad}</strong>
+      </div>
+      <div class="dato-tendencia">
+        <span>Períodos</span><strong>${a.periodos}</strong>
+      </div>`
+    : '<p class="ayuda">La serie no tiene períodos suficientes para estimar una tendencia.</p>';
 
-  document.getElementById("detalleGrafico").textContent =
-    `Fórmula: ${kpi.formula || "—"} · Unidad: ${kpi.unidad || "—"} · ` +
-    `Periodicidad: ${kpi.periodicidad || "—"}${analisis}`;
+  dibujarGraficoTendencia(kpi);
 
-  if (grafico) grafico.destroy();
+  $("fichaIndicador").innerHTML = `
+    <dl class="ficha">
+      <div><dt>Proceso</dt><dd>${escaparHtml(kpi.proceso_nombre || "—")}</dd></div>
+      <div><dt>Fórmula</dt><dd>${escaparHtml(kpi.formula || "—")}</dd></div>
+      <div><dt>Unidad</dt><dd>${escaparHtml(kpi.unidad || "—")}</dd></div>
+      <div><dt>Periodicidad</dt><dd>${escaparHtml(kpi.periodicidad || "—")}</dd></div>
+      <div><dt>Responsable</dt><dd>${escaparHtml(kpi.dueno_proceso || "—")}</dd></div>
+      <div><dt>Fuente</dt><dd>${escaparHtml(kpi.fuente_origen || "—")}</dd></div>
+    </dl>`;
+
+  const cuerpo = document.querySelector("#tablaMediciones tbody");
+  cuerpo.innerHTML = [...kpi.historico]
+    .reverse()
+    .map((punto) => {
+      const est = evaluarPunto(punto.valor, kpi.meta, kpi.tipo_medicion);
+      return `
+        <tr>
+          <td>${punto.periodo}</td>
+          <td class="valor-numerico">${formatearValor(punto.valor, kpi.unidad)}</td>
+          <td class="valor-numerico">${formatearValor(kpi.meta, kpi.unidad)}</td>
+          <td><span class="estado ${est}">${ETIQUETAS_ESTADO[est]}</span></td>
+        </tr>`;
+    })
+    .join("");
+}
+
+/* Réplica de la clasificación del servidor, para la tabla de mediciones */
+function evaluarPunto(valor, meta, tipoMedicion) {
+  if (valor === null || meta === null) return "sin_datos";
+  if (tipoMedicion === 2) {
+    if (valor <= meta) return "cumple";
+    return meta && valor <= meta * 1.2 ? "riesgo" : "bajo";
+  }
+  if (valor >= meta) return "cumple";
+  return meta && valor >= meta * 0.8 ? "riesgo" : "bajo";
+}
+
+function dibujarGraficoTendencia(kpi) {
+  const lienzo = $("graficoTendencia");
+  if (graficos.tendencia) graficos.tendencia.destroy();
 
   const etiquetas = kpi.historico.map((p) => p.periodo);
   const valores = kpi.historico.map((p) => p.valor);
-
-  // La proyeccion se dibuja como un punto adicional al final de la serie
   const conProyeccion = kpi.proyeccion !== null && kpi.proyeccion !== undefined;
-  const serieProyectada = conProyeccion
-    ? [...Array(valores.length - 1).fill(null), valores.at(-1), kpi.proyeccion]
-    : [];
 
   const conjuntos = [
     {
@@ -501,12 +650,12 @@ function mostrarGrafico(kpi) {
       borderColor: colorEstado(kpi.estado),
       backgroundColor: "rgba(20, 68, 110, .07)",
       borderWidth: 2.5,
+      tension: 0.3,
+      fill: valores.length > 1,
       pointBackgroundColor: "#fff",
       pointBorderWidth: 2,
-      pointHoverRadius: 6,
-      tension: 0.3,
-      fill: true,
       pointRadius: 4,
+      pointHoverRadius: 6,
     },
   ];
 
@@ -516,285 +665,633 @@ function mostrarGrafico(kpi) {
       data: Array(etiquetas.length + (conProyeccion ? 1 : 0)).fill(kpi.meta),
       borderColor: COLORES.ambar,
       borderDash: [6, 4],
+      borderWidth: 1.5,
       pointRadius: 0,
       fill: false,
     });
   }
 
-  if (conProyeccion) {
+  if (conProyeccion && valores.length > 1) {
     conjuntos.push({
       label: "Proyección",
-      data: serieProyectada,
-      borderColor: COLORES.azul,
+      data: [...Array(valores.length - 1).fill(null), valores.at(-1), kpi.proyeccion],
+      borderColor: COLORES.azulClaro,
       borderDash: [3, 3],
+      borderWidth: 2,
       pointRadius: 4,
       pointStyle: "triangle",
+      pointBackgroundColor: COLORES.azulClaro,
       fill: false,
     });
   }
 
-  grafico = new Chart(lienzo.getContext("2d"), {
-    type: kpi.tipo_grafico === "bar" && kpi.historico.length === 1 ? "bar" : "line",
+  graficos.tendencia = new Chart(lienzo.getContext("2d"), {
+    // Una sola medición se representa como barra: no hay evolución que trazar
+    type: valores.length === 1 ? "bar" : "line",
     data: {
-      labels: conProyeccion ? [...etiquetas, "Proyectado"] : etiquetas,
+      labels: conProyeccion && valores.length > 1 ? [...etiquetas, "Proyectado"] : etiquetas,
       datasets: conjuntos,
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: "index", intersect: false },
-      layout: { padding: { top: 8, right: 8 } },
-      font: { family: "Inter, system-ui, sans-serif" },
-      plugins: {
-        legend: {
-          position: "bottom",
-          align: "start",
-          labels: {
-            usePointStyle: true,
-            boxWidth: 7,
-            padding: 18,
-            font: { size: 12, family: "Inter, system-ui, sans-serif" },
-            color: "#46586b",
-          },
-        },
-        tooltip: {
-          backgroundColor: "#0a2540",
-          titleFont: { size: 12, weight: "600", family: "Inter, system-ui, sans-serif" },
-          bodyFont: { size: 12.5, family: "Inter, system-ui, sans-serif" },
-          padding: 12,
-          cornerRadius: 6,
-          displayColors: true,
-          boxPadding: 4,
-          callbacks: {
-            label: (ctx) =>
-              `  ${ctx.dataset.label}: ${formatearValor(ctx.parsed.y, kpi.unidad)}`,
-          },
+    options: opcionesGrafico(kpi.unidad),
+  });
+}
+
+/* Configuración común de los gráficos */
+function opcionesGrafico(unidad, extra = {}) {
+  const fuente = { family: "Inter, system-ui, sans-serif" };
+
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: "index", intersect: false },
+    layout: { padding: { top: 8, right: 8 } },
+    plugins: {
+      legend: {
+        position: "bottom",
+        align: "start",
+        labels: {
+          usePointStyle: true,
+          boxWidth: 7,
+          padding: 16,
+          font: { ...fuente, size: 12 },
+          color: "#46586b",
         },
       },
-      scales: {
-        x: {
-          grid: { display: false },
-          border: { color: "#e2e8ee" },
-          ticks: {
-            font: { size: 11.5, family: "Inter, system-ui, sans-serif" },
-            color: "#5c6b7d",
-          },
-        },
-        y: {
-          beginAtZero: true,
-          // Una grilla tenue orienta la lectura sin competir con los datos
-          grid: { color: "#eef2f6", drawTicks: false },
-          border: { display: false },
-          ticks: {
-            font: { size: 11.5, family: "Inter, system-ui, sans-serif" },
-            color: "#5c6b7d",
-            padding: 10,
-          },
-          title: {
-            display: Boolean(kpi.unidad),
-            text: kpi.unidad || "",
-            font: { size: 11.5, weight: "500", family: "Inter, system-ui, sans-serif" },
-            color: "#5c6b7d",
-          },
+      tooltip: {
+        backgroundColor: "#0a2540",
+        titleFont: { ...fuente, size: 12, weight: "600" },
+        bodyFont: { ...fuente, size: 12.5 },
+        padding: 12,
+        cornerRadius: 6,
+        boxPadding: 4,
+        callbacks: {
+          label: (ctx) => `  ${ctx.dataset.label}: ${formatearValor(ctx.parsed.y, unidad)}`,
         },
       },
     },
+    scales: {
+      x: {
+        grid: { display: false },
+        border: { color: "#e2e8ee" },
+        ticks: { font: { ...fuente, size: 11.5 }, color: "#5c6b7d" },
+      },
+      y: {
+        beginAtZero: true,
+        max: extra.maximo,
+        grid: { color: "#eef2f6", drawTicks: false },
+        border: { display: false },
+        ticks: { font: { ...fuente, size: 11.5 }, color: "#5c6b7d", padding: 10 },
+        title: {
+          display: Boolean(unidad),
+          text: unidad || "",
+          font: { ...fuente, size: 11.5, weight: "500" },
+          color: "#5c6b7d",
+        },
+      },
+    },
+  };
+}
+
+/* ============================================================
+   VISTA · ALERTAS
+   ============================================================ */
+function pintarAlertas() {
+  const contenedor = $("listaAlertas");
+  const severidad = estado.filtros.severidad;
+
+  let alertas = estado.datos.alertas;
+  if (severidad !== "todas") {
+    alertas = alertas.filter((a) => a.estado === severidad);
+  }
+
+  if (!alertas.length) {
+    contenedor.innerHTML =
+      '<p class="estado-carga">No hay alertas para el criterio seleccionado.</p>';
+    return;
+  }
+
+  contenedor.innerHTML = alertas
+    .map((a) => {
+      const kpi = estado.datos.kpis.find((k) => k.id_kpi === a.id_kpi);
+      const periodos = kpi ? kpi.historico.length : 0;
+      const direccion = kpi?.analisis?.direccion || "sin tendencia";
+
+      const brecha =
+        a.meta !== null && a.valor !== null
+          ? `${(a.valor - a.meta).toFixed(1)}${a.unidad === "%" ? " pp" : ""}`
+          : "—";
+
+      return `
+        <article class="tarjeta-alerta ${a.estado}">
+          <header class="alerta-cabecera">
+            <span class="estado ${a.estado}">${ETIQUETAS_ESTADO[a.estado]}</span>
+            ${a.critico ? '<span class="insignia">Proceso crítico</span>' : ""}
+          </header>
+
+          <h3>${escaparHtml(a.kpi)}</h3>
+          <p class="alerta-proceso">${escaparHtml(a.proceso)}</p>
+
+          <dl class="alerta-datos">
+            <div><dt>Resultado</dt><dd>${formatearValor(a.valor, a.unidad)}</dd></div>
+            <div><dt>Meta</dt><dd>${formatearValor(a.meta, a.unidad)}</dd></div>
+            <div><dt>Brecha</dt><dd>${brecha}</dd></div>
+            <div><dt>Tendencia</dt><dd>${direccion}</dd></div>
+            <div><dt>Períodos medidos</dt><dd>${periodos}</dd></div>
+            <div><dt>Responsable</dt><dd>${escaparHtml(a.dueno_proceso || "—")}</dd></div>
+          </dl>
+
+          <footer class="alerta-acciones">
+            <button class="btn-secundario" data-analizar="${a.id_kpi}">Analizar</button>
+            ${
+              PUEDE_NOTIFICAR
+                ? `<button class="btn-primario" data-alerta="${a.id_kpi}">Notificar</button>`
+                : ""
+            }
+          </footer>
+        </article>`;
+    })
+    .join("");
+}
+
+/* ============================================================
+   VISTA · REPORTES
+   ============================================================ */
+async function pintarReportes() {
+  if (PERMISOS.puede_cargar) $("seccionCarga").classList.remove("oculto");
+
+  const cuerpo = document.querySelector("#tablaCargas tbody");
+
+  try {
+    const cargas = await API.cargas();
+
+    cuerpo.innerHTML = cargas.length
+      ? cargas
+          .slice(0, 25)
+          .map(
+            (c) => `
+            <tr>
+              <td>${escaparHtml(c.archivo || "—")}</td>
+              <td>${escaparHtml(c.proceso || "—")}</td>
+              <td><span class="insignia">${escaparHtml(c.tipo || "—")}</span></td>
+              <td class="valor-numerico">${c.filas ?? "—"}</td>
+              <td class="celda-periodos">${escaparHtml(c.periodos || "—")}</td>
+              <td>${escaparHtml(c.responsable || "—")}</td>
+              <td>${(c.fecha || "").replace("T", " ").slice(0, 16)}</td>
+            </tr>`
+          )
+          .join("")
+      : '<tr><td colspan="7" class="estado-carga">Sin cargas registradas.</td></tr>';
+  } catch {
+    cuerpo.innerHTML =
+      '<tr><td colspan="7" class="estado-carga">No se pudo obtener el historial.</td></tr>';
+  }
+}
+
+/* ============================================================
+   Detalle del indicador
+   ============================================================ */
+function abrirDetalleIndicador(idKpi) {
+  const kpi = estado.datos.kpis.find((k) => k.id_kpi === Number(idKpi));
+  if (!kpi) return;
+
+  estado.indicadorTendencia = kpi.id_kpi;
+  $("indicadorTitulo").textContent = kpi.nombre;
+
+  const a = kpi.analisis;
+
+  $("indicadorCuerpo").innerHTML = `
+    <div class="detalle-cabecera">
+      <div class="detalle-valor ${kpi.estado}">
+        <span class="detalle-cifra">${formatearValor(kpi.valor, kpi.unidad)}</span>
+        <span class="detalle-meta">meta ${formatearValor(kpi.meta, kpi.unidad)}</span>
+      </div>
+      <span class="estado ${kpi.estado}">${ETIQUETAS_ESTADO[kpi.estado]}</span>
+    </div>
+
+    <dl class="ficha">
+      <div><dt>Proceso</dt><dd>${escaparHtml(kpi.proceso_nombre || "—")}</dd></div>
+      <div><dt>Fórmula</dt><dd>${escaparHtml(kpi.formula || "—")}</dd></div>
+      <div><dt>Tendencia esperada</dt><dd>${kpi.tendencia}</dd></div>
+      <div><dt>Periodicidad</dt><dd>${escaparHtml(kpi.periodicidad || "—")}</dd></div>
+      <div><dt>Fuente</dt><dd>${escaparHtml(kpi.fuente_origen || "—")}</dd></div>
+      <div><dt>Responsable</dt><dd>${escaparHtml(kpi.dueno_proceso || "—")}</dd></div>
+      <div><dt>Estado de implementación</dt><dd>${escaparHtml(kpi.estado_implementacion || "—")}</dd></div>
+      <div><dt>Mediciones</dt><dd>${kpi.historico.length}</dd></div>
+      ${
+        a
+          ? `<div><dt>Proyección</dt><dd>${formatearValor(kpi.proyeccion, kpi.unidad)} · R²=${a.r2} (${a.confiabilidad})</dd></div>`
+          : ""
+      }
+    </dl>`;
+
+  $("modalIndicador").classList.remove("oculto");
+}
+
+/* ============================================================
+   Notificación de desviaciones (RF7)
+   ============================================================ */
+function abrirModalAlerta(idKpi) {
+  const kpi = estado.datos.kpis.find((k) => k.id_kpi === Number(idKpi));
+  if (!kpi) return;
+
+  estado.kpiEnAlerta = kpi;
+
+  $("alertaKpi").textContent = kpi.nombre;
+  $("alertaProceso").textContent = kpi.proceso_nombre || "—";
+  $("alertaValor").textContent = formatearValor(kpi.valor, kpi.unidad);
+  $("alertaMeta").textContent = formatearValor(kpi.meta, kpi.unidad);
+  $("alertaDestinatario").textContent =
+    kpi.dueno_proceso || kpi.proceso_nombre || "Gerencia de TI";
+  $("alertaEstado").innerHTML =
+    `<span class="estado ${kpi.estado}">${ETIQUETAS_ESTADO[kpi.estado]}</span>`;
+
+  $("modalConfirmacion").classList.remove("oculto");
+  $("modalResultado").classList.add("oculto");
+  $("modalError").textContent = "";
+
+  const confirmar = $("modalConfirmar");
+  confirmar.classList.remove("oculto");
+  confirmar.disabled = false;
+  confirmar.textContent = "Enviar notificación";
+  $("modalCancelar").textContent = "Cancelar";
+
+  $("modalAlerta").classList.remove("oculto");
+  confirmar.focus();
+}
+
+async function confirmarNotificacion() {
+  const kpi = estado.kpiEnAlerta;
+  if (!kpi) return;
+
+  const boton = $("modalConfirmar");
+  boton.disabled = true;
+  boton.textContent = "Enviando…";
+  $("modalError").textContent = "";
+
+  try {
+    const respuesta = await API.notificar(kpi.id_kpi);
+
+    $("resultadoDetalle").textContent =
+      `Se notificó a ${respuesta.destinatario} sobre la desviación del indicador ` +
+      `«${respuesta.kpi}»` +
+      (respuesta.simulada
+        ? ". El envío por correo se encuentra simulado en esta etapa."
+        : ".");
+
+    $("resultadoMensaje").textContent = respuesta.mensaje;
+    $("modalConfirmacion").classList.add("oculto");
+    $("modalResultado").classList.remove("oculto");
+    boton.classList.add("oculto");
+    $("modalCancelar").textContent = "Cerrar";
+  } catch (error) {
+    $("modalError").textContent = error.message;
+    boton.disabled = false;
+    boton.textContent = "Enviar notificación";
+  }
+}
+
+/* ============================================================
+   Incidencias técnicas (RF8)
+   ============================================================ */
+function abrirModalIncidencia() {
+  $("incidenciaFormulario").classList.remove("oculto");
+  $("incidenciaResultado").classList.add("oculto");
+  $("incidenciaError").textContent = "";
+  $("incidenciaTituloCampo").value = "";
+  $("incidenciaDescripcion").value = "";
+
+  const enviar = $("incidenciaEnviar");
+  enviar.classList.remove("oculto");
+  enviar.disabled = false;
+  enviar.textContent = "Registrar";
+  $("incidenciaCancelar").textContent = "Cancelar";
+
+  $("modalIncidencia").classList.remove("oculto");
+  $("incidenciaTituloCampo").focus();
+}
+
+async function enviarIncidencia() {
+  const enviar = $("incidenciaEnviar");
+  const datos = {
+    modulo: $("incidenciaModulo").value,
+    severidad: $("incidenciaSeveridad").value,
+    titulo: $("incidenciaTituloCampo").value.trim(),
+    descripcion: $("incidenciaDescripcion").value.trim(),
+  };
+
+  if (datos.titulo.length < 5) {
+    $("incidenciaError").textContent = "Indique un título de al menos 5 caracteres.";
+    return;
+  }
+  if (datos.descripcion.length < 10) {
+    $("incidenciaError").textContent = "Describa la incidencia con al menos 10 caracteres.";
+    return;
+  }
+
+  enviar.disabled = true;
+  enviar.textContent = "Registrando…";
+  $("incidenciaError").textContent = "";
+
+  try {
+    const r = await API.registrarIncidencia(datos);
+    $("incidenciaDetalle").textContent =
+      `La incidencia N.º ${r.id_incidencia} quedó registrada en estado ${r.estado}.`;
+    $("incidenciaFormulario").classList.add("oculto");
+    $("incidenciaResultado").classList.remove("oculto");
+    enviar.classList.add("oculto");
+    $("incidenciaCancelar").textContent = "Cerrar";
+  } catch (error) {
+    $("incidenciaError").textContent = error.message;
+    enviar.disabled = false;
+    enviar.textContent = "Registrar";
+  }
+}
+
+/* ============================================================
+   Exportación
+   ============================================================ */
+async function exportar(tipo) {
+  const proceso = estado.filtros.proceso;
+  $("menuExportar").classList.add("oculto");
+
+  try {
+    if (tipo === "csv") await API.descargarCsv(proceso);
+    else if (tipo === "pdf") await API.descargarPdf(proceso);
+    else await API.abrirReporte(proceso);
+  } catch (error) {
+    alert("No se pudo generar el documento: " + error.message);
+  }
+}
+
+/* ============================================================
+   Inicialización de controles
+   ============================================================ */
+async function cargarSelectorProcesos() {
+  const selector = $("filtroProceso");
+
+  try {
+    const procesos = await API.procesos();
+    estado.datos.procesos = procesos;
+
+    const criticos = procesos.filter((p) => p.critico);
+    const resto = procesos.filter((p) => !p.critico);
+
+    const opciones = (lista) =>
+      lista
+        .map((p) => `<option value="${p.codigo_proceso}">${escaparHtml(p.nombre_proceso)}</option>`)
+        .join("");
+
+    selector.innerHTML =
+      '<option value="criticos">Procesos críticos</option>' +
+      '<option value="general">Todos los procesos</option>' +
+      (criticos.length ? `<optgroup label="Críticos">${opciones(criticos)}</optgroup>` : "") +
+      (resto.length ? `<optgroup label="Otros procesos">${opciones(resto)}</optgroup>` : "");
+
+    selector.value = estado.filtros.proceso;
+  } catch {
+    // El selector conserva la opción por defecto
+  }
+}
+
+function registrarEventos() {
+  /* --- Pestañas --- */
+  document.querySelectorAll(".pestana").forEach((boton) => {
+    boton.addEventListener("click", () => irA(boton.dataset.vista));
   });
 
-  seccion.classList.remove("oculto");
-  seccion.scrollIntoView({ behavior: "smooth", block: "nearest" });
-}
+  /* --- Filtros globales --- */
+  $("filtroProceso").addEventListener("change", (e) => {
+    estado.filtros.proceso = e.target.value;
+    estado.procesoAbierto = null;
+    $("detalleProceso").classList.add("oculto");
+    cargarDatos();
+  });
 
-/* ------------------------------------------------------------
-   Carga de datos desde el servidor
-   ------------------------------------------------------------ */
-async function cargarDatos() {
-  const selector = document.getElementById("selectorProceso");
-  const proceso = selector.value;
-  const nombreProceso = selector.options[selector.selectedIndex]?.textContent || "";
+  $("filtroEstado").addEventListener("change", (e) => {
+    estado.filtros.estado = e.target.value;
+    actualizarContexto();
+    irA(estado.vista);
+  });
 
-  document.getElementById("tituloDetalle").textContent =
-    proceso === "general" || proceso === "criticos"
-      ? `Detalle de indicadores · ${nombreProceso.toLowerCase()}`
-      : `Detalle de indicadores · ${nombreProceso}`;
+  let temporizador;
+  $("filtroBusqueda").addEventListener("input", (e) => {
+    estado.filtros.busqueda = e.target.value;
+    clearTimeout(temporizador);
+    temporizador = setTimeout(() => {
+      actualizarContexto();
+      if (estado.vista === "indicadores") pintarIndicadores();
+      else irA("indicadores");
+    }, 300);
+  });
 
-  try {
-    const [kpis, resumen, alertas] = await Promise.all([
-      API.kpis(proceso),
-      API.resumen(),
-      API.alertas(),
-    ]);
+  $("btnLimpiar").addEventListener("click", () => {
+    estado.filtros.estado = "todos";
+    estado.filtros.busqueda = "";
+    estado.filtros.severidad = "todas";
+    $("filtroEstado").value = "todos";
+    $("filtroBusqueda").value = "";
+    document.querySelectorAll(".chip").forEach((c) =>
+      c.classList.toggle("activo", c.dataset.severidad === "todas")
+    );
+    actualizarContexto();
+    irA(estado.vista);
+  });
 
-    kpisActuales = kpis;
-    pintarResumen(resumen);
-    pintarAlertas(alertas);
-    pintarTabla(kpis);
-  } catch (error) {
-    document.querySelector("#tablaKpis tbody").innerHTML =
-      `<tr><td colspan="9" class="estado-carga">No se pudieron obtener los datos: ${error.message}</td></tr>`;
-    document.getElementById("tarjetasResumen").innerHTML =
-      '<p class="estado-carga">Sin conexión con el servidor.</p>';
-  }
-}
+  $("btnActualizar").addEventListener("click", cargarDatos);
 
-/* ------------------------------------------------------------
-   Eventos
-   ------------------------------------------------------------ */
-document.getElementById("selectorProceso").addEventListener("change", () => {
-  document.getElementById("seccionGrafico").classList.add("oculto");
-  cargarDatos();
-});
+  /* --- Menús desplegables --- */
+  const alternar = (menu) => {
+    document.querySelectorAll(".menu-desplegable").forEach((m) => {
+      if (m !== menu) m.classList.add("oculto");
+    });
+    menu.classList.toggle("oculto");
+  };
 
-document.getElementById("btnActualizar").addEventListener("click", cargarDatos);
+  $("btnExportarMenu").addEventListener("click", (e) => {
+    e.stopPropagation();
+    alternar($("menuExportar"));
+  });
 
-// El filtro se aplica sobre los datos ya cargados, sin volver a consultar
-document.getElementById("soloMedidos").addEventListener("change", () => {
-  pintarTabla(kpisActuales);
-});
+  $("btnUsuario").addEventListener("click", (e) => {
+    e.stopPropagation();
+    alternar($("menuUsuario"));
+  });
 
-document.getElementById("btnSalir").addEventListener("click", () => API.cerrarSesion());
+  document.addEventListener("click", () => {
+    document.querySelectorAll(".menu-desplegable").forEach((m) => m.classList.add("oculto"));
+  });
 
-document.getElementById("btnCerrarGrafico").addEventListener("click", () => {
-  document.getElementById("seccionGrafico").classList.add("oculto");
-});
+  document.querySelectorAll("[data-exportar]").forEach((boton) => {
+    boton.addEventListener("click", () => exportar(boton.dataset.exportar));
+  });
 
-document.querySelector("#tablaKpis tbody").addEventListener("click", (evento) => {
-  const alerta = evento.target.closest("button[data-alerta]");
-  if (alerta) {
-    abrirModalAlerta(kpisActuales[Number(alerta.dataset.alerta)]);
-    return;
-  }
+  /* --- Accesos directos entre vistas --- */
+  $("btnAlertas").addEventListener("click", () => irA("alertas"));
 
-  const boton = evento.target.closest("button[data-indice]");
-  if (boton) mostrarGrafico(kpisActuales[Number(boton.dataset.indice)]);
-});
+  document.querySelectorAll("[data-ir]").forEach((boton) => {
+    boton.addEventListener("click", () => irA(boton.dataset.ir));
+  });
 
-// El panel de alertas puede referirse a indicadores de otros procesos,
-// por lo que se busca el detalle completo antes de abrir la ventana
-document.getElementById("listaAlertas").addEventListener("click", async (evento) => {
-  const boton = evento.target.closest("button[data-alerta-kpi]");
-  if (!boton) return;
+  /* --- Chips de severidad --- */
+  document.querySelectorAll(".chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      estado.filtros.severidad = chip.dataset.severidad;
+      document.querySelectorAll(".chip").forEach((c) => c.classList.remove("activo"));
+      chip.classList.add("activo");
+      pintarAlertas();
+    });
+  });
 
-  const idKpi = Number(boton.dataset.alertaKpi);
-  let indicador = kpisActuales.find((k) => k.id_kpi === idKpi);
-
-  if (!indicador) {
-    try {
-      const todos = await API.kpis("general");
-      indicador = todos.find((k) => k.id_kpi === idKpi);
-    } catch {
+  /* --- Interacción con el contenido (drill-down) --- */
+  document.addEventListener("click", (evento) => {
+    const analizar = evento.target.closest("[data-analizar]");
+    if (analizar) {
+      irA("tendencias", { idKpi: analizar.dataset.analizar });
       return;
     }
-  }
 
-  if (indicador) abrirModalAlerta(indicador);
-});
+    const detalle = evento.target.closest("[data-detalle]");
+    if (detalle) {
+      abrirDetalleIndicador(detalle.dataset.detalle);
+      return;
+    }
 
-/* ---------------- Ventana modal de notificación ---------------- */
-document.getElementById("modalConfirmar").addEventListener("click", confirmarNotificacion);
-document.getElementById("modalCancelar").addEventListener("click", cerrarModalAlerta);
-document.getElementById("modalCerrar").addEventListener("click", cerrarModalAlerta);
+    const alerta = evento.target.closest("[data-alerta]");
+    if (alerta) {
+      abrirModalAlerta(alerta.dataset.alerta);
+      return;
+    }
 
-// Cerrar al pulsar fuera de la ventana o con la tecla Escape
-document.getElementById("modalAlerta").addEventListener("click", (evento) => {
-  if (evento.target.id === "modalAlerta") cerrarModalAlerta();
-});
+    const proceso = evento.target.closest("[data-proceso]");
+    if (proceso) {
+      if (estado.vista === "resumen") {
+        irA("procesos");
+        setTimeout(() => abrirProceso(proceso.dataset.proceso), 120);
+      } else {
+        abrirProceso(proceso.dataset.proceso);
+      }
+    }
+  });
 
-/* ---------------- Incidencias técnicas (RF8) ---------------- */
-document.getElementById("btnIncidencia").addEventListener("click", abrirModalIncidencia);
-document.getElementById("incidenciaEnviar").addEventListener("click", enviarIncidencia);
-document.getElementById("incidenciaCancelar").addEventListener("click", cerrarModalIncidencia);
-document.getElementById("incidenciaCerrar").addEventListener("click", cerrarModalIncidencia);
+  // Las tarjetas de proceso son operables con teclado
+  document.addEventListener("keydown", (evento) => {
+    if (evento.key !== "Enter" && evento.key !== " ") return;
+    const proceso = evento.target.closest?.("[data-proceso]");
+    if (proceso) {
+      evento.preventDefault();
+      proceso.click();
+    }
+  });
 
-document.getElementById("modalIncidencia").addEventListener("click", (evento) => {
-  if (evento.target.id === "modalIncidencia") cerrarModalIncidencia();
-});
+  $("cerrarDetalleProceso").addEventListener("click", () => {
+    estado.procesoAbierto = null;
+    $("detalleProceso").classList.add("oculto");
+  });
 
-document.addEventListener("keydown", (evento) => {
-  if (evento.key !== "Escape") return;
-  cerrarModalAlerta();
-  cerrarModalIncidencia();
-});
+  /* --- Tendencias --- */
+  $("selectorIndicador").addEventListener("change", (e) => {
+    const kpi = estado.datos.kpis.find((k) => k.id_kpi === Number(e.target.value));
+    if (kpi) mostrarTendencia(kpi);
+  });
 
-document.getElementById("btnExportar").addEventListener("click", async () => {
-  try {
-    await API.descargarCsv(document.getElementById("selectorProceso").value);
-  } catch (error) {
-    alert("No se pudo exportar: " + error.message);
-  }
-});
+  /* --- Modales --- */
+  $("modalConfirmar").addEventListener("click", confirmarNotificacion);
+  $("modalCancelar").addEventListener("click", () => $("modalAlerta").classList.add("oculto"));
+  $("modalCerrar").addEventListener("click", () => $("modalAlerta").classList.add("oculto"));
 
-document.getElementById("btnReporte").addEventListener("click", async (evento) => {
-  const boton = evento.currentTarget;
-  const original = boton.textContent;
+  $("btnIncidencia").addEventListener("click", abrirModalIncidencia);
+  $("incidenciaEnviar").addEventListener("click", enviarIncidencia);
+  $("incidenciaCancelar").addEventListener("click", () =>
+    $("modalIncidencia").classList.add("oculto")
+  );
+  $("incidenciaCerrar").addEventListener("click", () =>
+    $("modalIncidencia").classList.add("oculto")
+  );
 
-  boton.disabled = true;
-  boton.textContent = "Generando…";
+  $("indicadorCerrar").addEventListener("click", () =>
+    $("modalIndicador").classList.add("oculto")
+  );
+  $("indicadorCerrarPie").addEventListener("click", () =>
+    $("modalIndicador").classList.add("oculto")
+  );
+  $("indicadorVerTendencia").addEventListener("click", () => {
+    $("modalIndicador").classList.add("oculto");
+    irA("tendencias", { idKpi: estado.indicadorTendencia });
+  });
 
-  try {
-    await API.descargarPdf(document.getElementById("selectorProceso").value);
-  } catch (error) {
-    alert("No se pudo generar el reporte: " + error.message);
-  } finally {
-    boton.disabled = false;
-    boton.textContent = original;
-  }
-});
+  document.querySelectorAll(".modal-fondo").forEach((fondo) => {
+    fondo.addEventListener("click", (e) => {
+      if (e.target === fondo) fondo.classList.add("oculto");
+    });
+  });
 
-document.getElementById("btnVerReporte").addEventListener("click", async () => {
-  try {
-    await API.abrirReporte(document.getElementById("selectorProceso").value);
-  } catch (error) {
-    alert("No se pudo abrir el reporte: " + error.message);
-  }
-});
+  document.addEventListener("keydown", (evento) => {
+    if (evento.key !== "Escape") return;
+    document.querySelectorAll(".modal-fondo").forEach((m) => m.classList.add("oculto"));
+    document.querySelectorAll(".menu-desplegable").forEach((m) => m.classList.add("oculto"));
+  });
 
-/* ---------------- Carga de archivos CSV (RF1) ---------------- */
-document.getElementById("formCarga").addEventListener("submit", async (evento) => {
-  evento.preventDefault();
+  $("btnSalir").addEventListener("click", () => API.cerrarSesion());
 
-  const proceso = document.getElementById("procesoCarga").value;
-  const entrada = document.getElementById("archivoCarga");
-  const salida = document.getElementById("resultadoCarga");
-  const boton = evento.target.querySelector("button");
+  /* --- Carga de archivos (RF1) --- */
+  $("formCarga").addEventListener("submit", async (evento) => {
+    evento.preventDefault();
 
-  if (!entrada.files.length) {
-    salida.innerHTML = '<div class="fallo">Seleccione un archivo CSV.</div>';
-    return;
-  }
+    const entrada = $("archivoCarga");
+    const salida = $("resultadoCarga");
+    const boton = evento.target.querySelector("button");
 
-  boton.disabled = true;
-  boton.textContent = "Procesando…";
-  salida.innerHTML = "";
+    if (!entrada.files.length) {
+      salida.innerHTML = '<div class="fallo">Seleccione un archivo.</div>';
+      return;
+    }
 
-  try {
-    const r = await API.cargarArchivo(proceso, entrada.files[0]);
+    boton.disabled = true;
+    boton.textContent = "Procesando…";
+    salida.innerHTML = "";
 
-    const advertencias = r.advertencias.length
-      ? `<ul>${r.advertencias.map((a) => `<li>${a}</li>`).join("")}</ul>`
-      : "";
+    try {
+      const r = await API.cargarArchivo($("procesoCarga").value, entrada.files[0]);
 
-    salida.innerHTML = `
-      <div class="exito">
-        <strong>Carga completada.</strong>
-        Se procesaron ${r.filas_leidas} filas y se registraron
-        ${r.resultados_registrados} resultados
-        (períodos: ${r.periodos_procesados.join(", ")}).
-        ${advertencias}
-      </div>`;
+      const advertencias = r.advertencias.length
+        ? `<ul>${r.advertencias.map((a) => `<li>${escaparHtml(a)}</li>`).join("")}</ul>`
+        : "";
 
-    entrada.value = "";
-    await cargarDatos();
-  } catch (error) {
-    salida.innerHTML = `<div class="fallo"><strong>No se pudo procesar el archivo.</strong><br>${error.message}</div>`;
-  } finally {
-    boton.disabled = false;
-    boton.textContent = "Procesar archivo";
-  }
-});
+      salida.innerHTML = `
+        <div class="exito">
+          <strong>Carga completada.</strong>
+          Se procesaron ${r.filas_leidas} filas y se registraron
+          ${r.resultados_registrados} resultados
+          (períodos: ${r.periodos_procesados.join(", ")}).
+          ${advertencias}
+        </div>`;
+
+      entrada.value = "";
+      await cargarDatos();
+      pintarReportes();
+    } catch (error) {
+      salida.innerHTML =
+        `<div class="fallo"><strong>No se pudo procesar el archivo.</strong><br>${escaparHtml(error.message)}</div>`;
+    } finally {
+      boton.disabled = false;
+      boton.textContent = "Procesar";
+    }
+  });
+}
 
 /* ------------------------------------------------------------
    Inicio
    ------------------------------------------------------------ */
+function prepararSesion() {
+  $("usuarioNombre").textContent = usuario.nombre;
+  $("usuarioNombreMenu").textContent = usuario.nombre;
+  $("usuarioRol").textContent = usuario.rol;
+
+  if (!PERMISOS.puede_exportar) {
+    $("btnExportarMenu").classList.add("oculto");
+  }
+}
+
 prepararSesion();
+registrarEventos();
 cargarSelectorProcesos().then(cargarDatos);

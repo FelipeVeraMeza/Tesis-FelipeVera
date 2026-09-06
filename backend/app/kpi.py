@@ -349,3 +349,114 @@ def alertas(solo_criticos: bool = False) -> list[dict]:
 
     # Las desviaciones mas severas encabezan la lista
     return sorted(encontradas, key=lambda a: (a["estado"] != "bajo", not a["critico"]))
+
+
+def periodos_disponibles() -> list[str]:
+    """Períodos con mediciones registradas, del más reciente al más antiguo."""
+    filas = db.seleccionar("resultado_kpi", {"select": "periodo"})
+    return sorted({f["periodo"] for f in filas}, reverse=True)
+
+
+def estado_general(codigo_proceso: str | None = None) -> dict:
+    """
+    Síntesis del desempeño para el encabezado del panel.
+
+    Consolida el cumplimiento global, la cobertura de medición y la variación
+    respecto al período anterior, de modo que la situación se lea de un vistazo
+    sin recorrer el detalle.
+    """
+    indicadores = obtener_kpis(codigo_proceso)
+    procesos = resumen_por_proceso()
+
+    if codigo_proceso == "criticos":
+        procesos = [p for p in procesos if p["critico"]]
+    elif codigo_proceso and codigo_proceso != "general":
+        procesos = [p for p in procesos if p["proceso"] == codigo_proceso]
+
+    medidos = [k for k in indicadores if k["estado"] != "sin_datos"]
+    cumplen = [k for k in medidos if k["estado"] == "cumple"]
+    desviados = [k for k in medidos if k["estado"] in ("riesgo", "bajo")]
+    criticos = [k for k in medidos if k["estado"] == "bajo"]
+
+    cumplimientos = [k["cumplimiento"] for k in medidos if k["cumplimiento"] is not None]
+    global_actual = round(sum(cumplimientos) / len(cumplimientos), 1) if cumplimientos else None
+
+    # Variación respecto al período anterior, calculada sobre los indicadores
+    # que disponen de al menos dos mediciones
+    variacion = _variacion_periodo(medidos)
+
+    procesos_en_meta = [
+        p for p in procesos
+        if p["cumplimiento_promedio"] is not None and p["cumplimiento_promedio"] >= 90
+    ]
+
+    periodos = periodos_disponibles()
+
+    return {
+        "cumplimiento_global": global_actual,
+        "variacion": variacion,
+        "indicadores_totales": len(indicadores),
+        "indicadores_medidos": len(medidos),
+        "indicadores_cumplen": len(cumplen),
+        "indicadores_desviados": len(desviados),
+        "indicadores_criticos": len(criticos),
+        "procesos_totales": len(procesos),
+        "procesos_en_meta": len(procesos_en_meta),
+        "periodo_actual": periodos[0] if periodos else None,
+        "periodos": periodos,
+    }
+
+
+def _variacion_periodo(indicadores: list[dict]) -> float | None:
+    """
+    Diferencia en puntos porcentuales entre el cumplimiento del último período
+    y el anterior. Devuelve None si no hay serie suficiente para compararlos.
+    """
+    actuales, previos = [], []
+
+    for kpi in indicadores:
+        serie = kpi["historico"]
+        if len(serie) < 2 or kpi["meta"] is None:
+            continue
+
+        for valores, punto in ((actuales, serie[-1]), (previos, serie[-2])):
+            cumplimiento = porcentaje_cumplimiento(
+                punto["valor"], kpi["meta"], kpi["tipo_medicion"]
+            )
+            if cumplimiento is not None:
+                valores.append(cumplimiento)
+
+    if not actuales or not previos:
+        return None
+
+    return round(sum(actuales) / len(actuales) - sum(previos) / len(previos), 1)
+
+
+def evolucion_cumplimiento(codigo_proceso: str | None = None) -> list[dict]:
+    """
+    Cumplimiento promedio por período, para el gráfico de evolución.
+
+    Permite observar si el desempeño del conjunto mejora o se deteriora, más
+    allá del resultado de cada indicador por separado.
+    """
+    indicadores = obtener_kpis(codigo_proceso)
+
+    por_periodo: dict[str, list[float]] = {}
+    for kpi in indicadores:
+        if kpi["meta"] is None:
+            continue
+        for punto in kpi["historico"]:
+            cumplimiento = porcentaje_cumplimiento(
+                punto["valor"], kpi["meta"], kpi["tipo_medicion"]
+            )
+            if cumplimiento is not None:
+                por_periodo.setdefault(punto["periodo"], []).append(cumplimiento)
+
+    return [
+        {
+            "periodo": periodo,
+            "cumplimiento": round(sum(valores) / len(valores), 1),
+            "indicadores": len(valores),
+        }
+        for periodo, valores in sorted(por_periodo.items())
+    ]

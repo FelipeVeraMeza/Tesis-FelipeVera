@@ -69,6 +69,18 @@ const API = (() => {
       }),
 
     procesos: () => peticion("/procesos"),
+
+    /* Síntesis del desempeño y evolución del cumplimiento */
+    estadoGeneral: (proceso = "general") =>
+      peticion(`/estado-general?proceso=${encodeURIComponent(proceso)}`),
+
+    evolucion: (proceso = "general") =>
+      peticion(`/evolucion?proceso=${encodeURIComponent(proceso)}`),
+
+    periodos: () => peticion("/periodos"),
+
+    /* Historial de cargas con su trazabilidad */
+    cargas: () => peticion("/cargas"),
     kpis:    (proceso = "general") => peticion(`/kpis?proceso=${encodeURIComponent(proceso)}`),
     resumen: () => peticion("/resumen"),
     alertas: () => peticion("/alertas"),

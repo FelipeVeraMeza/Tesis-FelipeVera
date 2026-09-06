@@ -120,13 +120,18 @@ Proyecto_KPI/
 │   ├── css/
 │   └── js/
 │
+├── .github/workflows/            Integración continua
+│
 ├── tests/                        Pruebas automatizadas
-│   ├── test_kpi.py
-│   ├── test_etl.py
-│   └── test_seguridad.py
+│   ├── test_kpi.py               Evaluación y proyecciones
+│   ├── test_etl.py               Fórmulas y validaciones
+│   ├── test_seguridad.py         Cifrado, sesiones y permisos
+│   ├── test_api.py               Endpoints y contratos
+│   └── test_e2e.py               Integración y flujos completos
 │
 └── docs/
     ├── despliegue.md             Publicación en Railway
+    ├── plan_pruebas.md           Plan de aseguramiento de la calidad
     ├── manual_uso.md             Manual de usuario
     ├── guia_defensa.md           Guion y preguntas previsibles
     ├── argumentos_defensa.md     Hallazgos e impacto del trabajo
@@ -332,20 +337,21 @@ procesos, pero conservan acceso al catálogo completo desde el selector.
 python -m pytest
 ```
 
-**95 pruebas** que verifican la lógica de negocio del sistema:
+**182 pruebas** organizadas por tipo:
 
 | Módulo | Pruebas | Qué verifica |
-|---|---|---|
-| `test_kpi.py` | 34 | Clasificación del desempeño, cumplimiento, proyecciones y análisis de tendencia |
-| `test_etl.py` | 40 | Las fórmulas, las validaciones de integridad y la normalización |
-| `test_seguridad.py` | 21 | Cifrado de contraseñas, tokens de sesión y atribuciones por perfil |
+|---|---:|---|
+| `test_etl.py` | 37 | Fórmulas, validaciones de integridad y normalización |
+| `test_kpi.py` | 37 | Evaluación del desempeño, cumplimiento y proyecciones |
+| `test_seguridad.py` | 21 | Cifrado, sesiones y atribuciones por perfil |
+| `test_api.py` | 46 | Endpoints, contratos y códigos de respuesta |
+| `test_e2e.py` | 41 | Integración, flujos completos, rendimiento y concurrencia |
 
-Las pruebas se ejecutan sin conexión a la base de datos, de modo que validan la
-lógica de forma aislada y reproducible.
+Las tres primeras baterías se ejecutan sin base de datos ni servidor. Las de
+extremo a extremo requieren el servidor en ejecución y se omiten solas si no
+responde.
 
-Incluyen un caso construido sobre la serie real del indicador *Porcentaje de
-cambios urgentes*, que comprueba la clasificación, la dirección de la tendencia
-y la confiabilidad del ajuste sobre datos efectivamente medidos.
+El plan completo está en [docs/plan_pruebas.md](docs/plan_pruebas.md).
 
 ---
 

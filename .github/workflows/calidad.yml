@@ -1,0 +1,36 @@
+name: Calidad del codigo
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  revision:
+    name: Revision estatica
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Instalar herramientas de revision
+        run: pip install ruff
+
+      # Se verifican errores reales, no preferencias de estilo
+      - name: Revisar el codigo
+        run: ruff check backend tests --select E9,F63,F7,F82 --output-format concise
+
+      - name: Comprobar que no haya credenciales en el repositorio
+        run: |
+          if grep -rEn "sb_secret_|SUPABASE_DB_PASSWORD=." \
+             --include="*.py" --include="*.js" --include="*.md" \
+             --exclude-dir=.git . ; then
+            echo "Se encontraron credenciales en archivos versionados"
+            exit 1
+          fi
+          echo "Sin credenciales expuestas"

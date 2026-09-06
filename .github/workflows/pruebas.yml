@@ -1,0 +1,43 @@
+name: Pruebas
+
+# Se ejecutan en cada cambio sobre la rama principal y en cada propuesta
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  pruebas:
+    name: Bateria de pruebas
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Obtener el codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verificar la sintaxis del codigo
+        run: python -m compileall -q backend tests
+
+      # Las pruebas unitarias no requieren base de datos ni servidor:
+      # validan la logica de negocio de forma aislada
+      - name: Ejecutar pruebas unitarias
+        run: python -m pytest tests/test_kpi.py tests/test_etl.py tests/test_seguridad.py -q
+
+      - name: Ejecutar pruebas de la API
+        run: python -m pytest tests/test_api.py -q
+
+      # Las pruebas E2E se omiten solas si el servidor no esta disponible
+      - name: Ejecutar pruebas de extremo a extremo
+        run: python -m pytest tests/test_e2e.py -q
