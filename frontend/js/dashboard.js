@@ -211,7 +211,7 @@ async function cargarDatos() {
     const [kpis, resumen, alertas, general, evolucion] = await Promise.all([
       API.kpis(proceso),
       API.resumen(),
-      API.alertas(),
+      API.alertas(proceso),
       API.estadoGeneral(proceso),
       API.evolucion(proceso),
     ]);
@@ -466,7 +466,9 @@ function pintarBarrasProcesos() {
             <div class="barra-relleno ${clase}" style="width:${Math.min(valor, 100)}%"></div>
           </div>
           <span class="barra-nota">
-            ${p.kpis_medidos - p.en_alerta} de ${p.kpis_medidos} indicadores dentro de meta
+            ${p.kpis_medidos - p.en_alerta} de ${p.kpis_medidos} indicadores dentro de meta${
+              p.en_alerta ? ` · ${p.en_alerta} en alerta` : ""
+            }
           </span>
         </div>`;
     })
@@ -486,8 +488,25 @@ function pintarProcesos() {
     procesos = procesos.filter((p) => p.proceso === estado.filtros.proceso);
   }
 
+  // El filtro de estado deja los procesos que tienen algún indicador
+  // en la situación seleccionada
+  const filtroEstado = estado.filtros.estado;
+  if (filtroEstado !== "todos") {
+    const conEseEstado = new Set(
+      estado.datos.kpis.filter((k) => k.estado === filtroEstado).map((k) => k.proceso)
+    );
+    procesos = procesos.filter((p) => conEseEstado.has(p.proceso));
+  }
+
+  // La búsqueda acota a los procesos cuyo nombre coincide
+  const texto = estado.filtros.busqueda.trim().toLowerCase();
+  if (texto) {
+    procesos = procesos.filter((p) => (p.nombre || "").toLowerCase().includes(texto));
+  }
+
   if (!procesos.length) {
-    contenedor.innerHTML = '<p class="estado-carga">No hay procesos para el filtro actual.</p>';
+    contenedor.innerHTML =
+      '<p class="estado-carga">Ningún proceso coincide con los filtros aplicados.</p>';
     return;
   }
 
@@ -496,12 +515,15 @@ function pintarProcesos() {
       const valor = p.cumplimiento_promedio;
       const clase = valor === null ? "" : valor >= 90 ? "cumple" : valor >= 75 ? "riesgo" : "bajo";
 
+      const dentro = p.kpis_medidos - p.en_alerta;
       const nota =
         p.kpis_medidos === 0
           ? `Sin mediciones · ${p.total_kpis} indicadores definidos`
           : p.en_alerta > 0
-          ? `${p.en_alerta} de ${p.kpis_medidos} indicadores fuera de meta`
-          : `${p.kpis_medidos} indicadores dentro de meta`;
+          ? `${dentro} de ${p.kpis_medidos} dentro de meta · ${p.en_alerta} requiere${
+              p.en_alerta > 1 ? "n" : ""
+            } atención`
+          : `${p.kpis_medidos} de ${p.kpis_medidos} indicadores dentro de meta`;
 
       return `
         <article class="tarjeta ${clase}" data-proceso="${p.proceso}" role="button" tabindex="0">
@@ -945,14 +967,14 @@ function pintarAlertas() {
 
   contenedor.innerHTML = alertas
     .map((a) => {
-      const kpi = estado.datos.kpis.find((k) => k.id_kpi === a.id_kpi);
-      const periodos = kpi ? kpi.historico.length : 0;
-      const direccion = kpi?.analisis?.direccion || "sin tendencia";
-
       const brecha =
-        a.meta !== null && a.valor !== null
-          ? `${(a.valor - a.meta).toFixed(1)}${a.unidad === "%" ? " pp" : ""}`
+        a.brecha !== null && a.brecha !== undefined
+          ? `${a.brecha > 0 ? "+" : ""}${a.brecha}${a.unidad === "%" ? " pp" : ""}`
           : "—";
+
+      const tendencia = a.direccion
+        ? `${a.direccion}${a.confiabilidad ? ` · ajuste ${a.confiabilidad}` : ""}`
+        : "serie insuficiente";
 
       return `
         <article class="tarjeta-alerta ${a.estado}">
@@ -967,9 +989,9 @@ function pintarAlertas() {
           <dl class="alerta-datos">
             <div><dt>Resultado</dt><dd>${formatearValor(a.valor, a.unidad)}</dd></div>
             <div><dt>Meta</dt><dd>${formatearValor(a.meta, a.unidad)}</dd></div>
-            <div><dt>Brecha</dt><dd>${brecha}</dd></div>
-            <div><dt>Tendencia</dt><dd>${direccion}</dd></div>
-            <div><dt>Períodos medidos</dt><dd>${periodos}</dd></div>
+            <div><dt>Brecha</dt><dd class="brecha">${brecha}</dd></div>
+            <div><dt>Tendencia</dt><dd>${tendencia}</dd></div>
+            <div><dt>Períodos medidos</dt><dd>${a.periodos ?? "—"}</dd></div>
             <div><dt>Responsable</dt><dd>${escaparHtml(a.dueno_proceso || "—")}</dd></div>
           </dl>
 

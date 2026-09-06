@@ -338,28 +338,48 @@ def resumen_por_proceso() -> list[dict]:
     return sorted(resumen, key=lambda b: (not b["critico"], b["nombre"]))
 
 
-def alertas(solo_criticos: bool = False) -> list[dict]:
+def alertas(
+    solo_criticos: bool = False, codigo_proceso: str | None = None
+) -> list[dict]:
     """
     KPI fuera de meta, que alimentan el panel de alertas automaticas (RF7).
 
-    Con `solo_criticos` la lista se acota a los cuatro procesos definidos en el
-    alcance del proyecto.
+    Con `codigo_proceso` la lista se acota al proceso indicado, de modo que
+    las alertas acompanen el contexto seleccionado en el panel. Con
+    `solo_criticos` se restringe a los cuatro procesos del alcance.
+
+    Cada alerta incorpora los antecedentes necesarios para dimensionar la
+    desviacion —periodos medidos, direccion de la tendencia y brecha— sin
+    requerir una consulta adicional.
     """
-    encontradas = [
-        {
-            "id_kpi": k["id_kpi"],
-            "kpi": k["nombre"],
-            "proceso": k["proceso_nombre"],
-            "valor": k["valor"],
-            "meta": k["meta"],
-            "unidad": k["unidad"],
-            "estado": k["estado"],
-            "critico": k["proceso_critico"],
-            "dueno_proceso": k["dueno_proceso"],
-        }
-        for k in obtener_kpis()
-        if k["estado"] in ("riesgo", "bajo")
-    ]
+    encontradas = []
+
+    for k in obtener_kpis(codigo_proceso):
+        if k["estado"] not in ("riesgo", "bajo"):
+            continue
+
+        analisis = k.get("analisis") or {}
+        brecha = None
+        if k["valor"] is not None and k["meta"] is not None:
+            brecha = round(k["valor"] - k["meta"], 2)
+
+        encontradas.append(
+            {
+                "id_kpi": k["id_kpi"],
+                "kpi": k["nombre"],
+                "proceso": k["proceso_nombre"],
+                "valor": k["valor"],
+                "meta": k["meta"],
+                "brecha": brecha,
+                "unidad": k["unidad"],
+                "estado": k["estado"],
+                "critico": k["proceso_critico"],
+                "dueno_proceso": k["dueno_proceso"],
+                "periodos": len(k["historico"]),
+                "direccion": analisis.get("direccion"),
+                "confiabilidad": analisis.get("confiabilidad"),
+            }
+        )
 
     if solo_criticos:
         encontradas = [a for a in encontradas if a["critico"]]

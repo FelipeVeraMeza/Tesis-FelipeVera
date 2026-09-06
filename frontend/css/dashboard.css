@@ -1638,3 +1638,9 @@ tbody td { padding: 12px 14px; }
   .vista { display: block !important; }
   .panel, .tarjeta, .tarjeta-sintesis { box-shadow: none; break-inside: avoid; }
 }
+
+/* La brecha respecto a la meta se destaca dentro de la ficha */
+.alerta-datos dd.brecha {
+  font-weight: 600;
+  color: var(--rojo);
+}

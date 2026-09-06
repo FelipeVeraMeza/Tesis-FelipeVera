@@ -128,7 +128,10 @@ def crear_app() -> Flask:
     @auth.requiere_sesion
     def alertas():
         solo_criticos = request.args.get("criticos", "").lower() in ("1", "true", "si")
-        return jsonify(kpi.alertas(solo_criticos=solo_criticos))
+        proceso = request.args.get("proceso")
+        return jsonify(
+            kpi.alertas(solo_criticos=solo_criticos, codigo_proceso=proceso)
+        )
 
     @app.post("/api/notificar")
     @auth.requiere_rol("Gerente", "Lider", "Administrador")

@@ -339,6 +339,37 @@ class TestAlertas:
         assert all("id_kpi" in a for a in alertas)
         assert all("dueno_proceso" in a for a in alertas)
 
+    def test_las_alertas_siguen_el_proceso_seleccionado(self, cliente, cabeceras_gerente):
+        """
+        El panel comparte un mismo contexto de filtros: las alertas deben
+        corresponder al proceso consultado y no al catálogo completo.
+        """
+        del_proceso = cliente.get(
+            "/api/alertas?proceso=calidad", headers=cabeceras_gerente
+        ).get_json()
+
+        assert all(a["proceso"] == "Gestion de Calidad TI" for a in del_proceso)
+
+    def test_un_proceso_sin_desviaciones_no_devuelve_alertas(self, cliente, cabeceras_gerente):
+        alertas = cliente.get(
+            "/api/alertas?proceso=inexistente", headers=cabeceras_gerente
+        ).get_json()
+
+        assert alertas == []
+
+    def test_cada_alerta_informa_los_antecedentes_de_la_desviacion(
+        self, cliente, cabeceras_gerente
+    ):
+        """
+        La tarjeta de alerta muestra la brecha y la tendencia sin requerir
+        una consulta adicional.
+        """
+        alertas = cliente.get("/api/alertas", headers=cabeceras_gerente).get_json()
+
+        for alerta in alertas:
+            assert {"brecha", "periodos", "direccion", "confiabilidad"} <= set(alerta)
+            assert isinstance(alerta["periodos"], int)
+
 
 # ==================================================================
 # Notificaciones (RF7)

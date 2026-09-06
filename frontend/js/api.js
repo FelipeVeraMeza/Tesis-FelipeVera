@@ -83,7 +83,8 @@ const API = (() => {
     cargas: () => peticion("/cargas"),
     kpis:    (proceso = "general") => peticion(`/kpis?proceso=${encodeURIComponent(proceso)}`),
     resumen: () => peticion("/resumen"),
-    alertas: () => peticion("/alertas"),
+    alertas: (proceso = "general") =>
+      peticion(`/alertas?proceso=${encodeURIComponent(proceso)}`),
 
     /* Notifica al responsable del proceso una desviación de desempeño (RF7) */
     notificar: (idKpi) =>
