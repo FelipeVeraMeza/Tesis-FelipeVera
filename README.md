@@ -41,10 +41,27 @@ Tablas 11 a 14 de la memoria.
 
 ### Origen de los datos
 
-Los valores históricos provienen de las mediciones registradas en la planilla,
-cuya fuente primaria es **Jira** para los procesos de cambios, incidentes y
-requerimientos. Las metas expresadas como proporción (0 a 1) se convierten a
-porcentaje al importarse, para mantener la coherencia con las fichas técnicas.
+| Origen | Mediciones | Período |
+|---|---:|---|
+| Levantamiento institucional (fuente Jira) | 44 | sept 2024 – mar 2025 |
+| Generadas para demostración | 239 | sept 2024 – sept 2026 |
+
+Las mediciones efectivas provienen de la planilla del levantamiento, cuya
+fuente primaria es **Jira**. Las metas expresadas como proporción (0 a 1) se
+convierten a porcentaje al importarse, para mantener la coherencia con las
+fichas técnicas.
+
+Las mediciones generadas completan los períodos posteriores a marzo de 2025 y
+los indicadores del alcance que la planilla no registra, de modo que el sistema
+pueda demostrarse sobre una serie extensa. Se almacenan bajo una fuente propia
+identificada como **Simulado**, y por tanto siempre es posible distinguirlas de
+las efectivas.
+
+```bash
+python backend/scripts/generar_periodos.py             # completar hasta el mes actual
+python backend/scripts/generar_periodos.py --simular   # revisar sin escribir
+python backend/scripts/generar_periodos.py --limpiar   # conservar solo las efectivas
+```
 
 ---
 
@@ -111,6 +128,7 @@ Proyecto_KPI/
 │       ├── init_db.py            Creación del esquema y verificación
 │       ├── importar_excel.py     Importación del catálogo institucional
 │       ├── medir_rendimiento.py  Medición de tiempos (RNF1)
+│       ├── generar_periodos.py   Mediciones para demostración
 │       └── servidor_correo_prueba.py
 │
 ├── frontend/                     Capa de presentación
