@@ -1644,3 +1644,19 @@ tbody td { padding: 12px 14px; }
   font-weight: 600;
   color: var(--rojo);
 }
+
+/* La unidad acompaña a la cifra sin competir con ella */
+.tarjeta-unidad {
+  display: block;
+  margin: -2px 0 10px;
+  font-size: 11px;
+  color: var(--texto-suave);
+}
+
+.tarjeta-valor small {
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--texto-suave);
+}
+
+.tarjeta-valor.sin-medir { color: var(--borde); }

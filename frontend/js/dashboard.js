@@ -158,6 +158,29 @@ function formatearPeriodo(periodo) {
   return MESES[indice] ? `${MESES[indice]} ${anio}` : periodo;
 }
 
+/* ------------------------------------------------------------
+   Situación de un proceso
+
+   Se determina por el estado de sus indicadores y no por el
+   promedio de cumplimiento: una desviación pequeña en magnitud
+   sigue siendo un incumplimiento.
+   ------------------------------------------------------------ */
+function situacionProceso(bloque) {
+  if (bloque.kpis_medidos === 0) return "";
+
+  const dentro = bloque.kpis_medidos - bloque.en_alerta;
+
+  // Ningún indicador dentro de meta
+  if (dentro === 0) return "bajo";
+
+  // Todos dentro de meta
+  if (bloque.en_alerta === 0) return "cumple";
+
+  // Situación mixta: la mayoría dentro de meta se informa como riesgo;
+  // por debajo de la mitad, como bajo desempeño
+  return dentro / bloque.kpis_medidos >= 0.5 ? "riesgo" : "bajo";
+}
+
 /* Aplica los filtros globales sobre la lista de indicadores */
 function kpisFiltrados() {
   const { estado: filtroEstado, busqueda } = estado.filtros;
@@ -454,7 +477,7 @@ function pintarBarrasProcesos() {
     .sort((a, b) => a.cumplimiento_promedio - b.cumplimiento_promedio)
     .map((p) => {
       const valor = p.cumplimiento_promedio;
-      const clase = valor >= 90 ? "cumple" : valor >= 75 ? "riesgo" : "bajo";
+      const clase = situacionProceso(p);
 
       return `
         <div class="barra-proceso" data-proceso="${p.proceso}" role="button" tabindex="0">
@@ -513,7 +536,7 @@ function pintarProcesos() {
   contenedor.innerHTML = procesos
     .map((p) => {
       const valor = p.cumplimiento_promedio;
-      const clase = valor === null ? "" : valor >= 90 ? "cumple" : valor >= 75 ? "riesgo" : "bajo";
+      const clase = situacionProceso(p);
 
       const dentro = p.kpis_medidos - p.en_alerta;
       const nota =
@@ -525,17 +548,31 @@ function pintarProcesos() {
             } atención`
           : `${p.kpis_medidos} de ${p.kpis_medidos} indicadores dentro de meta`;
 
+      const dentroDeMeta = p.kpis_medidos - p.en_alerta;
+      const proporcion = p.kpis_medidos ? (dentroDeMeta / p.kpis_medidos) * 100 : 0;
+
       return `
         <article class="tarjeta ${clase}" data-proceso="${p.proceso}" role="button" tabindex="0">
           <h3>${escaparHtml(p.nombre)}${p.critico ? '<span class="insignia tenue">Crítico</span>' : ""}</h3>
-          <p class="tarjeta-valor">${valor !== null ? valor + " %" : "—"}</p>
-          <div class="barra-pista compacta">
-            <div class="barra-relleno ${clase}" style="width:${valor !== null ? Math.min(valor, 100) : 0}%"></div>
-          </div>
-          <span class="tarjeta-detalle">${nota}</span>
+
           ${
-            p.kpis_medidos < p.total_kpis
-              ? `<span class="tarjeta-cobertura">${p.kpis_medidos}/${p.total_kpis} medidos</span>`
+            p.kpis_medidos
+              ? `<p class="tarjeta-valor">${dentroDeMeta}<small>/${p.kpis_medidos}</small></p>
+                 <span class="tarjeta-unidad">indicadores dentro de meta</span>
+                 <div class="barra-pista compacta">
+                   <div class="barra-relleno ${clase}" style="width:${proporcion}%"></div>
+                 </div>
+                 <span class="tarjeta-detalle">
+                   ${valor !== null ? `Cumplimiento promedio ${valor} %` : ""}
+                 </span>`
+              : `<p class="tarjeta-valor sin-medir">—</p>
+                 <span class="tarjeta-unidad">sin mediciones</span>
+                 <span class="tarjeta-detalle">${p.total_kpis} indicadores definidos</span>`
+          }
+
+          ${
+            p.kpis_medidos && p.kpis_medidos < p.total_kpis
+              ? `<span class="tarjeta-cobertura">${p.kpis_medidos} de ${p.total_kpis} con medición</span>`
               : ""
           }
         </article>`;
