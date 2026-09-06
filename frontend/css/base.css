@@ -1,89 +1,151 @@
 /* ============================================================
-   Estilos base y variables de la identidad grafica AFP Horizonte
+   Estilos base — Sistema de Seguimiento de KPIs
+   AFP Horizonte · Gerencia de Tecnologías de la Información
    ============================================================ */
 
 :root {
-  --azul-institucional: #0f4c75;
-  --azul-oscuro:        #082f49;
+  /* Paleta institucional */
+  --azul-profundo:      #0a2540;
+  --azul-institucional: #14446e;
+  --azul-medio:         #1d5c93;
   --azul-claro:         #3282b8;
-  --azul-suave:         #e8f1f8;
+  --azul-suave:         #eaf2f8;
+  --azul-tenue:         #f5f9fc;
 
-  --verde:   #2e9e5b;
-  --ambar:   #d99411;
-  --rojo:    #d64545;
+  /* Estados de desempeño */
+  --verde:        #177243;
+  --verde-suave:  #e8f5ee;
+  --ambar:        #8a5c0d;
+  --ambar-suave:  #fdf4e3;
+  --rojo:         #b93b3b;
+  --rojo-suave:   #fceded;
 
-  --texto:         #1c2833;
-  --texto-suave:   #5c6b7a;
-  --borde:         #dfe6ec;
-  --fondo:         #f4f7fa;
-  --superficie:    #ffffff;
+  /* Texto */
+  --texto:        #17212b;
+  --texto-medio:  #46586b;
+  --texto-suave:  #5c6b7d;
 
-  --radio:  10px;
-  --sombra: 0 1px 3px rgba(15, 76, 117, .08), 0 4px 14px rgba(15, 76, 117, .06);
+  /* Superficies */
+  --borde:        #e2e8ee;
+  --borde-suave:  #eef2f6;
+  --fondo:        #f7f9fb;
+  --superficie:   #ffffff;
 
-  --fuente: "Inter", -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  /* Elevación */
+  --sombra-sutil: 0 1px 2px rgba(10, 37, 64, .04);
+  --sombra:       0 1px 3px rgba(10, 37, 64, .06), 0 1px 2px rgba(10, 37, 64, .04);
+  --sombra-media: 0 4px 12px rgba(10, 37, 64, .08), 0 1px 3px rgba(10, 37, 64, .05);
+  --sombra-alta:  0 12px 32px rgba(10, 37, 64, .14);
+
+  --radio-sm: 6px;
+  --radio:    8px;
+  --radio-lg: 12px;
+
+  --fuente: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+            "Helvetica Neue", Arial, sans-serif;
+  --fuente-num: "Inter", "SF Mono", "Segoe UI", system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;
   font-family: var(--fuente);
   font-size: 14px;
+  line-height: 1.55;
   color: var(--texto);
   background: var(--fondo);
-  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3 { margin: 0; font-weight: 600; }
+h1, h2, h3 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+
+/* Las cifras se alinean por columna para facilitar la comparación */
+.cifra, .valor-numerico, td.num {
+  font-family: var(--fuente-num);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
 
 /* ---------------- Botones ---------------- */
 .btn-primario,
 .btn-secundario,
 .btn-texto {
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
-  border-radius: var(--radio);
+  border-radius: var(--radio-sm);
   cursor: pointer;
-  transition: background .15s, border-color .15s, opacity .15s;
+  transition: background .15s ease, border-color .15s ease,
+              color .15s ease, box-shadow .15s ease;
+  white-space: nowrap;
 }
 
 .btn-primario {
-  padding: 11px 20px;
-  border: none;
+  padding: 10px 20px;
+  border: 1px solid var(--azul-institucional);
   background: var(--azul-institucional);
   color: #fff;
+  box-shadow: var(--sombra-sutil);
 }
-.btn-primario:hover  { background: var(--azul-oscuro); }
-.btn-primario:disabled { opacity: .6; cursor: not-allowed; }
+
+.btn-primario:hover:not(:disabled) {
+  background: var(--azul-profundo);
+  border-color: var(--azul-profundo);
+}
+
+.btn-primario:disabled { opacity: .55; cursor: not-allowed; }
 
 .btn-secundario {
   padding: 8px 14px;
   border: 1px solid var(--borde);
   background: var(--superficie);
-  color: var(--texto);
+  color: var(--texto-medio);
 }
-.btn-secundario:hover { border-color: var(--azul-claro); color: var(--azul-institucional); }
+
+.btn-secundario:hover:not(:disabled) {
+  border-color: var(--azul-claro);
+  color: var(--azul-institucional);
+  background: var(--azul-tenue);
+}
+
+.btn-secundario:disabled { opacity: .55; cursor: not-allowed; }
 
 .btn-texto {
-  padding: 8px 10px;
+  padding: 7px 10px;
   border: none;
   background: none;
   color: var(--texto-suave);
-  text-decoration: underline;
 }
+
 .btn-texto:hover { color: var(--azul-institucional); }
 
-/* ---------------- Campos de formulario ---------------- */
-.campo { margin-bottom: 16px; text-align: left; }
+/* Foco visible para navegación por teclado */
+.btn-primario:focus-visible,
+.btn-secundario:focus-visible,
+.btn-texto:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--azul-claro);
+  outline-offset: 2px;
+}
+
+/* ---------------- Formularios ---------------- */
+.campo { margin-bottom: 18px; text-align: left; }
 
 .campo label {
   display: block;
   margin-bottom: 6px;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
-  color: var(--texto-suave);
+  color: var(--texto-medio);
 }
 
 input[type="email"],
@@ -99,20 +161,23 @@ select {
   color: var(--texto);
   background: var(--superficie);
   border: 1px solid var(--borde);
-  border-radius: var(--radio);
+  border-radius: var(--radio-sm);
+  transition: border-color .15s ease, box-shadow .15s ease;
 }
 
 textarea {
   resize: vertical;
-  min-height: 84px;
-  line-height: 1.5;
+  min-height: 88px;
+  line-height: 1.55;
 }
 
 input:focus, textarea:focus, select:focus {
   outline: none;
   border-color: var(--azul-claro);
-  box-shadow: 0 0 0 3px rgba(50, 130, 184, .15);
+  box-shadow: 0 0 0 3px rgba(50, 130, 184, .12);
 }
+
+input::placeholder, textarea::placeholder { color: #9aa9b8; }
 
 /* ---------------- Utilidades ---------------- */
 .oculto { display: none !important; }
@@ -124,8 +189,9 @@ input:focus, textarea:focus, select:focus {
 }
 
 .estado-carga {
-  padding: 20px;
+  padding: 32px 20px;
   text-align: center;
+  font-size: 13.5px;
   color: var(--texto-suave);
 }
 

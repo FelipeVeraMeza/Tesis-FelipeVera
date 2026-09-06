@@ -17,10 +17,10 @@ const ETIQUETAS_ESTADO = {
 };
 
 const COLORES = {
-  azul:  "#0f4c75",
-  verde: "#2e9e5b",
-  ambar: "#d99411",
-  rojo:  "#d64545",
+  azul:  "#14446e",
+  verde: "#177243",
+  ambar: "#8a5c0d",
+  rojo:  "#b93b3b",
 };
 
 const PERMISOS = usuario.permisos || {};
@@ -499,7 +499,11 @@ function mostrarGrafico(kpi) {
       label: kpi.nombre,
       data: valores,
       borderColor: colorEstado(kpi.estado),
-      backgroundColor: "rgba(15, 76, 117, .12)",
+      backgroundColor: "rgba(20, 68, 110, .07)",
+      borderWidth: 2.5,
+      pointBackgroundColor: "#fff",
+      pointBorderWidth: 2,
+      pointHoverRadius: 6,
       tension: 0.3,
       fill: true,
       pointRadius: 4,
@@ -539,18 +543,59 @@ function mostrarGrafico(kpi) {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
+      layout: { padding: { top: 8, right: 8 } },
+      font: { family: "Inter, system-ui, sans-serif" },
       plugins: {
-        legend: { position: "bottom", labels: { usePointStyle: true, boxWidth: 8 } },
+        legend: {
+          position: "bottom",
+          align: "start",
+          labels: {
+            usePointStyle: true,
+            boxWidth: 7,
+            padding: 18,
+            font: { size: 12, family: "Inter, system-ui, sans-serif" },
+            color: "#46586b",
+          },
+        },
         tooltip: {
+          backgroundColor: "#0a2540",
+          titleFont: { size: 12, weight: "600", family: "Inter, system-ui, sans-serif" },
+          bodyFont: { size: 12.5, family: "Inter, system-ui, sans-serif" },
+          padding: 12,
+          cornerRadius: 6,
+          displayColors: true,
+          boxPadding: 4,
           callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${formatearValor(ctx.parsed.y, kpi.unidad)}`,
+            label: (ctx) =>
+              `  ${ctx.dataset.label}: ${formatearValor(ctx.parsed.y, kpi.unidad)}`,
           },
         },
       },
       scales: {
+        x: {
+          grid: { display: false },
+          border: { color: "#e2e8ee" },
+          ticks: {
+            font: { size: 11.5, family: "Inter, system-ui, sans-serif" },
+            color: "#5c6b7d",
+          },
+        },
         y: {
           beginAtZero: true,
-          title: { display: true, text: kpi.unidad || "" },
+          // Una grilla tenue orienta la lectura sin competir con los datos
+          grid: { color: "#eef2f6", drawTicks: false },
+          border: { display: false },
+          ticks: {
+            font: { size: 11.5, family: "Inter, system-ui, sans-serif" },
+            color: "#5c6b7d",
+            padding: 10,
+          },
+          title: {
+            display: Boolean(kpi.unidad),
+            text: kpi.unidad || "",
+            font: { size: 11.5, weight: "500", family: "Inter, system-ui, sans-serif" },
+            color: "#5c6b7d",
+          },
         },
       },
     },
