@@ -90,6 +90,7 @@ h1, h2, h3 {
 
 .btn-primario {
   padding: 10px 20px;
+  min-height: 38px;
   border: 1px solid var(--azul-institucional);
   background: var(--azul-institucional);
   color: #fff;
@@ -99,12 +100,16 @@ h1, h2, h3 {
 .btn-primario:hover:not(:disabled) {
   background: var(--azul-profundo);
   border-color: var(--azul-profundo);
+  box-shadow: var(--sombra);
 }
+
+.btn-primario:active:not(:disabled) { transform: translateY(1px); }
 
 .btn-primario:disabled { opacity: .55; cursor: not-allowed; }
 
 .btn-secundario {
-  padding: 8px 14px;
+  padding: 9px 16px;
+  min-height: 38px;
   border: 1px solid var(--borde);
   background: var(--superficie);
   color: var(--texto-medio);
@@ -115,6 +120,8 @@ h1, h2, h3 {
   color: var(--azul-institucional);
   background: var(--azul-tenue);
 }
+
+.btn-secundario:active:not(:disabled) { transform: translateY(1px); }
 
 .btn-secundario:disabled { opacity: .55; cursor: not-allowed; }
 

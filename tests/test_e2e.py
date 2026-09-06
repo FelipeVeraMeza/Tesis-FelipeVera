@@ -62,6 +62,31 @@ def cabeceras(sesiones, perfil="gerente"):
     return {"Authorization": f"Bearer {sesiones[perfil]}"}
 
 
+def _limpiar_periodo(periodo: str) -> None:
+    """
+    Elimina las mediciones de un período de prueba.
+
+    Las pruebas que escriben en la base deben dejarla como la encontraron: de
+    lo contrario, los datos de prueba se mezclarían con las mediciones reales
+    del catálogo.
+    """
+    try:
+        from app import config, db  # noqa: F401
+
+        requests.delete(
+            f"{config.SUPABASE_URL}/rest/v1/resultado_kpi",
+            headers={
+                "apikey": config.SUPABASE_SECRET_KEY,
+                "Authorization": f"Bearer {config.SUPABASE_SECRET_KEY}",
+            },
+            params={"periodo": f"eq.{periodo}"},
+            timeout=TIEMPO_LIMITE,
+        )
+    except Exception:  # noqa: BLE001
+        # La limpieza es complementaria: su fallo no invalida la prueba
+        pass
+
+
 # ==================================================================
 # Integración entre capas
 # ==================================================================
@@ -235,35 +260,51 @@ class TestFlujos:
             assert any(k["id_kpi"] == id_kpi for k in indicadores)
 
     def test_flujo_de_carga_del_analista(self, sesiones):
-        """Cargar un archivo y comprobar que queda registrado."""
+        """
+        Cargar un archivo y comprobar que queda registrado.
+
+        La prueba usa un período muy posterior al de las mediciones reales,
+        de modo que no altere la serie histórica del catálogo, y lo elimina
+        al finalizar.
+        """
+        import io
+
         cabecera = cabeceras(sesiones, "analista")
-        plantilla = Path(__file__).resolve().parent.parent / "docs" / "plantillas" / "cambios.csv"
 
-        if not plantilla.exists():
-            pytest.skip("No se encontró la plantilla de carga")
+        # Período reservado para pruebas, fuera del rango de los datos reales
+        periodo = "2099-01"
+        contenido = (
+            "periodo,cambios_solicitados,cambios_aceptados,cambios_urgentes,"
+            "cambios_implementados,cambios_revertidos,cambios_error_certificacion\n"
+            f"{periodo},100,95,10,90,2,3\n"
+        )
 
-        with open(plantilla, "rb") as archivo:
+        try:
             carga = requests.post(
                 f"{BASE}/api/carga",
                 headers=cabecera,
                 data={"proceso": "cambios"},
-                files={"archivo": ("cambios.csv", archivo, "text/csv")},
+                files={"archivo": ("prueba_e2e.csv", io.BytesIO(contenido.encode()), "text/csv")},
                 timeout=60,
             )
 
-        assert carga.status_code == 200
+            assert carga.status_code == 200
 
-        resultado = carga.json()
-        assert resultado["resultados_registrados"] > 0
-        assert resultado["responsable"], "La carga debe registrar su responsable"
+            resultado = carga.json()
+            assert resultado["resultados_registrados"] > 0
+            assert resultado["responsable"], "La carga debe registrar su responsable"
+            assert periodo in resultado["periodos_procesados"]
 
-        # La trazabilidad queda disponible en el historial
-        historial = requests.get(
-            f"{BASE}/api/cargas", headers=cabecera, timeout=TIEMPO_LIMITE
-        ).json()
+            # La trazabilidad queda disponible en el historial
+            historial = requests.get(
+                f"{BASE}/api/cargas", headers=cabecera, timeout=TIEMPO_LIMITE
+            ).json()
 
-        assert historial[0]["archivo"] == "cambios.csv"
-        assert historial[0]["responsable"] == resultado["responsable"]
+            assert historial[0]["archivo"] == "prueba_e2e.csv"
+            assert historial[0]["responsable"] == resultado["responsable"]
+
+        finally:
+            _limpiar_periodo(periodo)
 
     def test_flujo_de_exportacion(self, sesiones):
         cabecera = cabeceras(sesiones)

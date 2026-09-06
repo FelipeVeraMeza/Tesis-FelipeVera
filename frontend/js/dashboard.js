@@ -122,6 +122,18 @@ function flechaTendencia(kpi) {
   return kpi.tendencia === "ascendente" ? "↑" : "↓";
 }
 
+const MESES = [
+  "ene", "feb", "mar", "abr", "may", "jun",
+  "jul", "ago", "sep", "oct", "nov", "dic",
+];
+
+/* Convierte "2025-03" en "mar 2025", más legible en tablas y ejes */
+function formatearPeriodo(periodo) {
+  const [anio, mes] = String(periodo).split("-");
+  const indice = Number(mes) - 1;
+  return MESES[indice] ? `${MESES[indice]} ${anio}` : periodo;
+}
+
 /* Aplica los filtros globales sobre la lista de indicadores */
 function kpisFiltrados() {
   const { estado: filtroEstado, busqueda } = estado.filtros;
@@ -274,7 +286,7 @@ function pintarSintesis(g) {
 
     <article class="tarjeta-sintesis">
       <span class="sintesis-rotulo">Último período</span>
-      <span class="sintesis-cifra periodo">${g.periodo_actual || "—"}</span>
+      <span class="sintesis-cifra periodo">${g.periodo_actual ? formatearPeriodo(g.periodo_actual) : "—"}</span>
       <span class="sintesis-nota">${g.periodos.length} períodos registrados</span>
     </article>`;
 }
@@ -325,7 +337,7 @@ function pintarEvolucion() {
   graficos.evolucion = new Chart(lienzo.getContext("2d"), {
     type: "line",
     data: {
-      labels: serie.map((p) => p.periodo),
+      labels: serie.map((p) => formatearPeriodo(p.periodo)),
       datasets: [
         {
           label: "Cumplimiento promedio",
@@ -351,8 +363,34 @@ function pintarEvolucion() {
         },
       ],
     },
-    options: opcionesGrafico("%", { maximo: 105 }),
+    options: opcionesGrafico("%", rangoSerie(serie.map((p) => p.cumplimiento), 90)),
   });
+}
+
+/* ------------------------------------------------------------
+   Rango del eje vertical
+
+   Partir siempre en cero aplana las series concentradas en un
+   tramo estrecho. El eje se ajusta a los valores observados,
+   dejando un margen para que la línea no toque los bordes.
+   ------------------------------------------------------------ */
+function rangoSerie(valores, referencia = null) {
+  const puntos = valores.filter((v) => v !== null && v !== undefined);
+  if (!puntos.length) return {};
+
+  if (referencia !== null) puntos.push(referencia);
+
+  const menor = Math.min(...puntos);
+  const mayor = Math.max(...puntos);
+  const amplitud = mayor - menor;
+
+  // Con valores casi idénticos se abre una ventana mínima legible
+  const margen = amplitud < 1 ? Math.max(Math.abs(mayor) * 0.05, 1) : amplitud * 0.15;
+
+  return {
+    minimo: Math.max(0, Math.floor(menor - margen)),
+    maximo: Math.ceil(mayor + margen),
+  };
 }
 
 function pintarBarrasProcesos() {
@@ -615,7 +653,7 @@ function mostrarTendencia(kpi) {
       const est = evaluarPunto(punto.valor, kpi.meta, kpi.tipo_medicion);
       return `
         <tr>
-          <td>${punto.periodo}</td>
+          <td class="celda-periodo">${formatearPeriodo(punto.periodo)}</td>
           <td class="valor-numerico">${formatearValor(punto.valor, kpi.unidad)}</td>
           <td class="valor-numerico">${formatearValor(kpi.meta, kpi.unidad)}</td>
           <td><span class="estado ${est}">${ETIQUETAS_ESTADO[est]}</span></td>
@@ -639,7 +677,7 @@ function dibujarGraficoTendencia(kpi) {
   const lienzo = $("graficoTendencia");
   if (graficos.tendencia) graficos.tendencia.destroy();
 
-  const etiquetas = kpi.historico.map((p) => p.periodo);
+  const etiquetas = kpi.historico.map((p) => formatearPeriodo(p.periodo));
   const valores = kpi.historico.map((p) => p.valor);
   const conProyeccion = kpi.proyeccion !== null && kpi.proyeccion !== undefined;
 
@@ -692,7 +730,10 @@ function dibujarGraficoTendencia(kpi) {
       labels: conProyeccion && valores.length > 1 ? [...etiquetas, "Proyectado"] : etiquetas,
       datasets: conjuntos,
     },
-    options: opcionesGrafico(kpi.unidad),
+    options: opcionesGrafico(
+      kpi.unidad,
+      rangoSerie([...valores, kpi.proyeccion], kpi.meta)
+    ),
   });
 }
 
@@ -736,7 +777,8 @@ function opcionesGrafico(unidad, extra = {}) {
         ticks: { font: { ...fuente, size: 11.5 }, color: "#5c6b7d" },
       },
       y: {
-        beginAtZero: true,
+        beginAtZero: extra.minimo === undefined,
+        min: extra.minimo,
         max: extra.maximo,
         grid: { color: "#eef2f6", drawTicks: false },
         border: { display: false },

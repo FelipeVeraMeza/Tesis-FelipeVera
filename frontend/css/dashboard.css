@@ -365,7 +365,8 @@ table {
 
 thead th {
   position: sticky;
-  top: 60px;
+  /* Bajo el encabezado (60px) y la barra de pestañas (48px) */
+  top: 108px;
   z-index: 10;
   padding: 11px 16px;
   text-align: left;
@@ -1139,26 +1140,35 @@ tbody tr:hover { background: var(--azul-tenue); }
 
 .ficha {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 0 28px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 0 32px;
   margin: 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--borde);
 }
 
 .ficha > div {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  align-items: baseline;
   gap: 16px;
-  padding: 9px 0;
+  padding: 10px 0;
   border-bottom: 1px solid var(--borde-suave);
 }
 
-.ficha dt { font-size: 12.5px; color: var(--texto-suave); white-space: nowrap; }
+.ficha dt {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--texto-suave);
+}
 
 .ficha dd {
   margin: 0;
   font-size: 13px;
   font-weight: 500;
-  text-align: right;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
@@ -1283,6 +1293,20 @@ tbody tr:hover { background: var(--azul-tenue); }
 }
 
 th.num, td.num { text-align: right; }
+
+.celda-periodo {
+  font-weight: 500;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+/* La tabla de mediciones no requiere encabezado adherente: vive dentro
+   de un panel y su altura es acotada */
+#tablaMediciones thead th,
+#tablaProceso thead th,
+#tablaCargas thead th {
+  position: static;
+}
 
 /* ============================================================
    Adaptación a pantallas menores
