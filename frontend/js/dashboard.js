@@ -127,6 +127,30 @@ const MESES = [
   "jul", "ago", "sep", "oct", "nov", "dic",
 ];
 
+/* ------------------------------------------------------------
+   Degradado del área bajo la curva
+
+   Un relleno que se desvanece hacia abajo aporta profundidad sin
+   competir con la línea, que es lo que interesa leer.
+   ------------------------------------------------------------ */
+function degradado(lienzo, color) {
+  const contexto = lienzo.getContext("2d");
+  const alto = lienzo.height || 320;
+  const franja = contexto.createLinearGradient(0, 0, 0, alto);
+
+  const rgb = hexARgb(color);
+  franja.addColorStop(0, `rgba(${rgb}, .16)`);
+  franja.addColorStop(1, `rgba(${rgb}, .01)`);
+
+  return franja;
+}
+
+function hexARgb(hex) {
+  const limpio = hex.replace("#", "");
+  const entero = parseInt(limpio, 16);
+  return `${(entero >> 16) & 255}, ${(entero >> 8) & 255}, ${entero & 255}`;
+}
+
 /* Convierte "2025-03" en "mar 2025", más legible en tablas y ejes */
 function formatearPeriodo(periodo) {
   const [anio, mes] = String(periodo).split("-");
@@ -347,26 +371,28 @@ function pintarEvolucion() {
           label: "Cumplimiento promedio",
           data: serie.map((p) => p.cumplimiento),
           borderColor: COLORES.azul,
-          backgroundColor: "rgba(20, 68, 110, .07)",
-          borderWidth: 2.5,
-          tension: 0.32,
+          backgroundColor: degradado(lienzo, COLORES.azul),
+          borderWidth: 2,
+          tension: 0.28,
           fill: true,
           pointBackgroundColor: "#fff",
+          pointBorderColor: COLORES.azul,
           pointBorderWidth: 2,
-          pointRadius: 4,
+          pointRadius: serie.length > 14 ? 0 : 3.5,
           pointHoverRadius: 6,
         },
         {
           label: "Margen sobre la meta",
           data: serie.map((p) => p.holgura),
           borderColor: COLORES.verde,
-          borderWidth: 2,
-          borderDash: [5, 3],
-          tension: 0.32,
+          borderWidth: 1.8,
+          borderDash: [5, 4],
+          tension: 0.28,
           fill: false,
           pointBackgroundColor: "#fff",
+          pointBorderColor: COLORES.verde,
           pointBorderWidth: 2,
-          pointRadius: 3,
+          pointRadius: serie.length > 14 ? 0 : 3,
           pointHoverRadius: 5,
         },
       ],
@@ -695,44 +721,39 @@ function dibujarGraficoTendencia(kpi) {
   const valores = kpi.historico.map((p) => p.valor);
   const conProyeccion = kpi.proyeccion !== null && kpi.proyeccion !== undefined;
 
+  const color = colorEstado(kpi.estado);
+
   const conjuntos = [
     {
-      label: kpi.nombre,
+      label: "Valor medido",
       data: valores,
-      borderColor: colorEstado(kpi.estado),
-      backgroundColor: "rgba(20, 68, 110, .07)",
-      borderWidth: 2.5,
-      tension: 0.3,
+      borderColor: color,
+      backgroundColor: degradado(lienzo, color),
+      borderWidth: 2,
+      tension: 0.25,
       fill: valores.length > 1,
       pointBackgroundColor: "#fff",
+      pointBorderColor: color,
       pointBorderWidth: 2,
-      pointRadius: 4,
+      // Con series extensas los puntos se muestran solo al posarse encima
+      pointRadius: valores.length > 14 ? 0 : 3.5,
       pointHoverRadius: 6,
+      pointHoverBorderWidth: 2.5,
     },
   ];
-
-  if (kpi.meta !== null) {
-    conjuntos.push({
-      label: "Meta",
-      data: Array(etiquetas.length + (conProyeccion ? 1 : 0)).fill(kpi.meta),
-      borderColor: COLORES.ambar,
-      borderDash: [6, 4],
-      borderWidth: 1.5,
-      pointRadius: 0,
-      fill: false,
-    });
-  }
 
   if (conProyeccion && valores.length > 1) {
     conjuntos.push({
       label: "Proyección",
       data: [...Array(valores.length - 1).fill(null), valores.at(-1), kpi.proyeccion],
       borderColor: COLORES.azulClaro,
-      borderDash: [3, 3],
+      borderDash: [4, 4],
       borderWidth: 2,
-      pointRadius: 4,
+      pointRadius: 5,
       pointStyle: "triangle",
       pointBackgroundColor: COLORES.azulClaro,
+      pointBorderColor: "#fff",
+      pointBorderWidth: 1.5,
       fill: false,
     });
   }
@@ -744,68 +765,164 @@ function dibujarGraficoTendencia(kpi) {
       labels: conProyeccion && valores.length > 1 ? [...etiquetas, "Proyectado"] : etiquetas,
       datasets: conjuntos,
     },
-    options: opcionesGrafico(
-      kpi.unidad,
-      rangoSerie([...valores, kpi.proyeccion], kpi.meta)
-    ),
+    options: {
+      ...opcionesGrafico(kpi.unidad, {
+        ...rangoSerie([...valores, kpi.proyeccion], kpi.meta),
+        meta: kpi.meta,
+      }),
+      plugins: {
+        ...opcionesGrafico(kpi.unidad, { meta: kpi.meta }).plugins,
+        bandaMeta: { meta: kpi.meta, tendencia: kpi.tendencia },
+      },
+    },
   });
 }
 
-/* Configuración común de los gráficos */
-function opcionesGrafico(unidad, extra = {}) {
-  const fuente = { family: "Inter, system-ui, sans-serif" };
+/* ============================================================
+   Configuración común de los gráficos
 
+   El criterio de presentación sigue el de un reporte de gestión:
+   la grilla se mantiene tenue, la meta se marca como referencia y
+   el detalle se reserva para la información emergente.
+   ============================================================ */
+const FUENTE = { family: "Inter, system-ui, sans-serif" };
+
+const EJE = {
+  tick: { ...FUENTE, size: 11 },
+  color: "#5c6b7d",
+  grilla: "#eef2f6",
+  borde: "#dde5ec",
+};
+
+function opcionesGrafico(unidad, extra = {}) {
   return {
     responsive: true,
     maintainAspectRatio: false,
     interaction: { mode: "index", intersect: false },
-    layout: { padding: { top: 8, right: 8 } },
+    layout: { padding: { top: 12, right: 12, bottom: 4 } },
+
     plugins: {
       legend: {
         position: "bottom",
         align: "start",
         labels: {
           usePointStyle: true,
-          boxWidth: 7,
-          padding: 16,
-          font: { ...fuente, size: 12 },
+          pointStyle: "line",
+          boxWidth: 22,
+          boxHeight: 2,
+          padding: 18,
+          font: { ...FUENTE, size: 11.5 },
           color: "#46586b",
         },
       },
       tooltip: {
         backgroundColor: "#0a2540",
-        titleFont: { ...fuente, size: 12, weight: "600" },
-        bodyFont: { ...fuente, size: 12.5 },
-        padding: 12,
+        titleColor: "#ffffff",
+        titleFont: { ...FUENTE, size: 12, weight: "600" },
+        bodyColor: "#dce6f0",
+        bodyFont: { ...FUENTE, size: 12 },
+        padding: { top: 10, bottom: 10, left: 12, right: 14 },
         cornerRadius: 6,
-        boxPadding: 4,
+        displayColors: true,
+        boxWidth: 8,
+        boxHeight: 8,
+        boxPadding: 5,
+        borderColor: "rgba(255,255,255,.12)",
+        borderWidth: 1,
         callbacks: {
-          label: (ctx) => `  ${ctx.dataset.label}: ${formatearValor(ctx.parsed.y, unidad)}`,
+          label: (ctx) => ` ${ctx.dataset.label}: ${formatearValor(ctx.parsed.y, unidad)}`,
+          // La distancia respecto a la meta se informa junto al valor
+          afterBody: (items) => {
+            if (extra.meta === undefined || extra.meta === null) return "";
+            const punto = items.find((i) => i.datasetIndex === 0);
+            if (!punto) return "";
+
+            const diferencia = punto.parsed.y - extra.meta;
+            const signo = diferencia >= 0 ? "+" : "";
+            return `\nRespecto a la meta: ${signo}${diferencia.toFixed(2)}`;
+          },
         },
       },
     },
+
     scales: {
       x: {
         grid: { display: false },
-        border: { color: "#e2e8ee" },
-        ticks: { font: { ...fuente, size: 11.5 }, color: "#5c6b7d" },
+        border: { color: EJE.borde },
+        ticks: {
+          font: EJE.tick,
+          color: EJE.color,
+          maxRotation: 0,
+          autoSkipPadding: 16,
+        },
       },
       y: {
         beginAtZero: extra.minimo === undefined,
         min: extra.minimo,
         max: extra.maximo,
-        grid: { color: "#eef2f6", drawTicks: false },
+        grid: { color: EJE.grilla, drawTicks: false },
         border: { display: false },
-        ticks: { font: { ...fuente, size: 11.5 }, color: "#5c6b7d", padding: 10 },
-        title: {
-          display: Boolean(unidad),
-          text: unidad || "",
-          font: { ...fuente, size: 11.5, weight: "500" },
-          color: "#5c6b7d",
+        ticks: {
+          font: EJE.tick,
+          color: EJE.color,
+          padding: 12,
+          maxTicksLimit: 7,
+          callback: (valor) => formatearValor(valor, unidad),
         },
       },
     },
+
+    elements: {
+      line: { borderCapStyle: "round", borderJoinStyle: "round" },
+      point: { hitRadius: 12 },
+    },
   };
+}
+
+/* ------------------------------------------------------------
+   Banda de meta
+
+   Sombrea la zona favorable del gráfico, de modo que el
+   cumplimiento se aprecie sin necesidad de leer los valores.
+   ------------------------------------------------------------ */
+const bandaMeta = {
+  id: "bandaMeta",
+  beforeDatasetsDraw(grafico, _args, opciones) {
+    const { meta, tendencia } = opciones || {};
+    if (meta === undefined || meta === null) return;
+
+    const { ctx, chartArea, scales } = grafico;
+    if (!chartArea || !scales.y) return;
+
+    const y = scales.y.getPixelForValue(meta);
+    if (!Number.isFinite(y)) return;
+
+    const desdeArriba = tendencia === "ascendente";
+    const inicio = desdeArriba ? chartArea.top : y;
+    const alto = desdeArriba ? y - chartArea.top : chartArea.bottom - y;
+
+    if (alto <= 0) return;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(23, 114, 67, .045)";
+    ctx.fillRect(chartArea.left, inicio, chartArea.right - chartArea.left, alto);
+
+    // Línea de referencia sobre el valor de la meta
+    ctx.strokeStyle = "rgba(138, 92, 13, .5)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(chartArea.left, y);
+    ctx.lineTo(chartArea.right, y);
+    ctx.stroke();
+    ctx.restore();
+  },
+};
+
+if (typeof Chart !== "undefined") {
+  Chart.register(bandaMeta);
+  Chart.defaults.font.family = FUENTE.family;
+  Chart.defaults.color = "#46586b";
 }
 
 /* ============================================================
