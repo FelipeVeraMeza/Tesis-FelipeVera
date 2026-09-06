@@ -25,7 +25,28 @@ def crear_app() -> Flask:
     )
     app.config["SECRET_KEY"] = config.SECRET_KEY
     app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB por archivo
+
+    # Los archivos de la interfaz se revalidan en cada visita: de lo
+    # contrario el navegador conserva la version anterior tras un
+    # despliegue y muestra un comportamiento que ya fue corregido
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+
     CORS(app)
+
+    @app.after_request
+    def controlar_cache(respuesta):
+        """
+        Indica al navegador que revalide la interfaz antes de reutilizarla.
+
+        Las respuestas de la API nunca se almacenan, ya que reflejan el estado
+        de los indicadores en el momento de la consulta.
+        """
+        if request.path.startswith("/api/"):
+            respuesta.headers["Cache-Control"] = "no-store"
+        elif request.path.endswith((".js", ".css", ".html")) or request.path == "/":
+            respuesta.headers["Cache-Control"] = "no-cache, must-revalidate"
+
+        return respuesta
 
     # --------------------------------------------------------------
     # Frontend
@@ -39,7 +60,17 @@ def crear_app() -> Flask:
     # --------------------------------------------------------------
     @app.get("/api/salud")
     def salud():
-        return jsonify(db.probar_conexion())
+        estado = db.probar_conexion()
+
+        # La fecha del archivo principal permite verificar que la interfaz
+        # entregada corresponde a la version desplegada
+        try:
+            marca = (config.FRONTEND_DIR / "js" / "dashboard.js").stat().st_mtime
+            estado["version"] = datetime.fromtimestamp(marca).strftime("%Y%m%d.%H%M")
+        except OSError:
+            estado["version"] = "desconocida"
+
+        return jsonify(estado)
 
     # --------------------------------------------------------------
     # Autenticacion (RF4)
